@@ -1,0 +1,30 @@
+:root {
+  --bg: #0b0b0f;
+  --panel: #1a1a22;
+  --accent: #2c1b1b;
+  --text: #b8a58a;
+  --border: #705a43;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Georgia, serif; background: var(--bg); color: var(--text); }
+#app { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; }
+.topbar { display: flex; justify-content: space-between; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); box-shadow: 0 0 8px #000 inset; }
+.layout { display: grid; grid-template-columns: 180px 1fr; min-height: 0; }
+.sidebar { background: #13131a; padding: 10px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.tab, button { background: var(--accent); border: 1px solid var(--border); color: var(--text); padding: 8px; cursor: pointer; }
+.panel { background: var(--panel); border: 1px solid var(--border); box-shadow: 0 0 10px rgba(184,165,138,.12); }
+#mainView { overflow: auto; padding: 10px; }
+.feed { max-height: 180px; overflow: auto; padding: 8px 12px; }
+.feed ul { margin: 0; padding-left: 18px; }
+.family-card { margin-bottom: 10px; border: 1px solid var(--border); }
+.family-header { width: 100%; text-align: left; font-weight: bold; background: #201822; }
+.family-body { padding: 8px; }
+.section { margin-top: 8px; }
+.person { cursor: pointer; padding: 2px 0; }
+.person:hover { text-decoration: underline; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: grid; place-items: center; }
+.modal.hidden { display: none; }
+.modal-content { width: min(680px, 90vw); max-height: 85vh; overflow: auto; padding: 12px; position: relative; }
+.close { position: absolute; right: 8px; top: 8px; }
+.statbar { display:inline-block; width: 110px; height: 10px; border: 1px solid var(--border); }
+.statbar > span { display:block; height:100%; background:#8a6b48; }

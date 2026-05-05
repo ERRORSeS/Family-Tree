@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Family Tree</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>Time: <span id="timeDisplay">Year 1700 • Morning</span></div>
+      <div>Global Reputation: <span id="globalReputation">0</span></div>
+      <button id="pauseBtn">Pause</button>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <button class="tab active" data-tab="families">🏛️ Families</button>
+        <button class="tab" data-tab="actions">🎮 Actions</button>
+      </aside>
+      <main id="mainView" class="panel"></main>
+    </div>
+
+    <footer class="feed panel">
+      <h3>Live Event + Gossip Feed</h3>
+      <ul id="eventFeed"></ul>
+    </footer>
+  </div>
+
+  <div id="characterModal" class="modal hidden">
+    <div class="modal-content panel">
+      <button id="closeModal" class="close">×</button>
+      <div id="characterContent"></div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

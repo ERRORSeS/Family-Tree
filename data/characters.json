@@ -1,0 +1,8 @@
+[
+  {"id":"c1","firstName":"Eleanor","familyId":"whitmore","originFamilyId":"whitmore","gender":"female","age":21,"maritalStatus":"unmarried","health":"Healthy","ambition":7,"intelligence":8,"beautyBase":8,"noble":true},
+  {"id":"c2","firstName":"Henry","familyId":"whitmore","originFamilyId":"whitmore","gender":"male","age":43,"maritalStatus":"widowed","health":"Healthy","ambition":6,"intelligence":7,"beautyBase":5,"noble":false},
+  {"id":"c3","firstName":"Catherine","familyId":"ashford","originFamilyId":"ashford","gender":"female","age":19,"maritalStatus":"unmarried","health":"Healthy","ambition":5,"intelligence":7,"beautyBase":7,"noble":true},
+  {"id":"c4","firstName":"Edmund","familyId":"ashford","originFamilyId":"davenport","gender":"male","age":27,"maritalStatus":"married","health":"Healthy","ambition":8,"intelligence":6,"beautyBase":6,"noble":false},
+  {"id":"c5","firstName":"Lydia","familyId":"davenport","originFamilyId":"davenport","gender":"female","age":41,"maritalStatus":"married","health":"Ill","ambition":4,"intelligence":8,"beautyBase":6,"noble":false},
+  {"id":"c6","firstName":"Thomas","familyId":"davenport","originFamilyId":"davenport","gender":"male","age":14,"maritalStatus":"unmarried","health":"Healthy","ambition":6,"intelligence":5,"beautyBase":7,"noble":false}
+]
