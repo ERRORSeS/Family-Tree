@@ -1,13 +1,12 @@
-export function propagateGossip(state) {
-  const rumors = state.events.filter(e => /rumor|scandal|lover|engagement|cheating|divorce|affair/i.test(e.text));
-  if (!rumors.length) return;
-  const base = rumors[Math.floor(Math.random() * rumors.length)].text;
-  const mutationBits = ["now whispered in salons", "retold at tea", "denied by witnesses", "embellished by rivals"];
-  const mutation = `${base} (${mutationBits[Math.floor(Math.random() * mutationBits.length)]})`;
-  if (Math.random() < 0.7) state.feed.unshift({ text: mutation, type: "gossip", time: `Year ${state.year}` });
+export function spreadGossip(state, event) {
+  if (!event || Math.random() < 0.35) return;
+  const variants = ["embellished", "contradicted", "repeated", "weaponized"];
+  const v = variants[Math.floor(Math.random() * variants.length)];
+  state.feed.unshift({ text: `Rumor ${v}: ${event.text}`, type: "gossip", time: event.time });
+  state.families.forEach((f) => { f.gossipLevel = (f.gossipLevel || 0) + 1; });
+}
 
-  for (const fam of state.families) {
-    const socialArmor = fam.reputation > 65 ? 0.2 : 0.6;
-    fam.reputation = Math.max(0, fam.reputation - socialArmor);
-  }
+export function propagateGossip(state) {
+  const latest = state.events[0];
+  spreadGossip(state, latest);
 }
