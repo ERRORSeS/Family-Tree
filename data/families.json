@@ -1,0 +1,5 @@
+[
+  {"id":"whitmore","name":"House Whitmore","wealth":"High","reputation":72,"status":"Rising","scandal":18},
+  {"id":"ashford","name":"House Ashford","wealth":"Medium","reputation":61,"status":"Stable","scandal":24},
+  {"id":"davenport","name":"House Davenport","wealth":"Low","reputation":48,"status":"Declining","scandal":37}
+]
