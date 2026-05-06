@@ -1,4 +1,4 @@
-const ACTIONS = ["attend event", "pursue relationship", "gossip", "attempt affair", "avoid others", "strengthen bonds"];
+const ACTIONS = ["attend event", "pursue relationship", "gossip", "attempt affair", "avoid others", "strengthen bonds", "confess feelings", "break relationship", "spread rumor"];
 
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
@@ -19,7 +19,13 @@ export function decideAction(state, character) {
   const livingTargets = state.characters.filter((c) => c.id !== character.id && c.status !== "dead" && c.age >= 10);
   const topAttraction = livingTargets.reduce((best, target) => Math.max(best, attractionScore(character, target)), -100);
   const reputationRisk = Math.max(0, -(character.characterReputation ?? 0));
+  character.frustrationLevel ??= 0;
+  character.desireLevel ??= 5;
+  character.socialPressure ??= 0;
   const socialPressure = (character.personality.socialHunger ?? 5) + ((character.relationships || []).length / 2);
+  character.socialPressure = socialPressure;
+  character.desireLevel = clamp(character.desireLevel + (topAttraction > 50 ? 1 : -0.2), 0, 10);
+  character.frustrationLevel = clamp(character.frustrationLevel + (topAttraction < 10 ? 0.8 : -0.3), 0, 10);
 
   const scores = {
     "attend event": socialPressure + (character.personality.charm ?? 5) + (character.personality.ambition ?? 5) - reputationRisk * 0.2,
@@ -27,8 +33,14 @@ export function decideAction(state, character) {
     "gossip": (character.personality.jealousy ?? 5) + (character.personality.socialHunger ?? 5) + (character.personality.riskTolerance ?? 5) - (character.personality.morality ?? 5),
     "attempt affair": topAttraction + (character.personality.riskTolerance ?? 5) - (character.personality.loyalty ?? 5) - (character.personality.morality ?? 5),
     "avoid others": (10 - (character.personality.socialHunger ?? 5)) + reputationRisk * 0.4,
-    "strengthen bonds": (character.personality.loyalty ?? 5) + (character.personality.morality ?? 5) + ((character.relationships || []).length > 0 ? 5 : 0)
+    "strengthen bonds": (character.personality.loyalty ?? 5) + (character.personality.morality ?? 5) + ((character.relationships || []).length > 0 ? 5 : 0),
+    "confess feelings": topAttraction + character.desireLevel + character.frustrationLevel * 0.4,
+    "break relationship": character.frustrationLevel + (10 - (character.personality.loyalty ?? 5)) + reputationRisk * 0.2,
+    "spread rumor": socialPressure + (character.personality.jealousy ?? 5) + character.frustrationLevel - (character.personality.morality ?? 5)
   };
+
+  if (character.frustrationLevel > 7) scores["attempt affair"] += 6;
+  if (character.frustrationLevel > 8) scores["break relationship"] += 8;
 
   return ACTIONS.reduce((best, action) => (scores[action] > scores[best] ? action : best), ACTIONS[0]);
 }
