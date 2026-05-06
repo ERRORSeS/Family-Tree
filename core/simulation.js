@@ -55,9 +55,12 @@ function runAutonomousActions(state) {
       continue;
     }
     const spouse = c.spouseId ? state.charactersById[c.spouseId] : null;
-    const spouseRel = spouse ? (c.relationships || []).find((r) => r.targetId === spouse.id)?.strength ?? 0 : -100;
+    const spouseRelObj = spouse ? (c.relationships || []).find((r) => r.targetId === spouse.id) : null;
+    const spouseRel = spouseRelObj?.strength ?? -100;
+    const spouseTrust = spouseRelObj?.trust ?? 50;
     const eligibleAge = c.age >= 18 && c.age <= 45 && spouse && spouse.age >= 18 && spouse.age <= 55;
-    if (eligibleAge && spouseRel > 20 && c.gender !== spouse.gender && Math.random() < 0.1) attemptChild(state, c, spouse, "ai");
+    const loyal = (c.personality?.loyalty ?? 5) >= 4;
+    if (eligibleAge && spouseRel > 30 && spouseTrust > 45 && loyal && c.gender !== spouse.gender && Math.random() < 0.07) attemptChild(state, c, spouse, "ai");
   }
 }
 
