@@ -2,17 +2,28 @@ import { computeBeauty, inheritFeature, inheritScalar } from "./genetics.js";
 
 const EVENT_TYPES = ["social", "romantic", "conflict", "family", "scandal", "rare"];
 const EVENT_POOL = {
-  social: ["successful interaction", "awkward interaction", "ignored attempt", "unexpected connection"],
-  romantic: ["attraction increase", "rejection", "secret interest", "jealousy triggered"],
+  social: ["bonding moment", "awkward interaction", "supportive gesture", "public disagreement"],
+  romantic: ["mutual attraction", "one-sided interest", "rejection", "jealousy triggered", "awkward interaction"],
   conflict: ["argument", "rivalry escalation", "public embarrassment"],
   family: ["inheritance tension", "parental pressure", "sibling rivalry"],
   scandal: ["affair discovered", "rumor spread", "reputation collapse"],
   rare: ["sudden death", "unexpected pregnancy", "dramatic breakup", "inheritance shock"]
 };
+
+const RELATIONSHIP_MAP = {
+  social: ["Friendly", "Close", "Protective"],
+  romantic: ["Romantic Interest", "Secret Attraction", "Obsessed"],
+  conflict: ["Suspicious", "Rival", "Enemy"],
+  family: ["Protective", "Close", "Suspicious"],
+  scandal: ["Suspicious", "Rival", "Enemy"],
+  rare: ["Close", "Rival", "Protective"]
+};
+
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const randomFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const eventTypeLabel = (type) => type.toUpperCase().replace(/_/g, " ");
 
-function calcSeverityLevel({ participants = 2, repImpact = 0, relationshipShift = 0, riskLevel = "low" } = {}) {
+function calcPriority({ participants = 2, repImpact = 0, relationshipShift = 0, riskLevel = "low" } = {}) {
   let score = 0;
   score += participants >= 3 ? 2 : participants >= 2 ? 1 : 0;
   score += Math.abs(repImpact) >= 6 ? 2 : Math.abs(repImpact) >= 2 ? 1 : 0;
@@ -23,33 +34,60 @@ function calcSeverityLevel({ participants = 2, repImpact = 0, relationshipShift 
   return "low";
 }
 
-function formatEvent(type, participants, outcome, severity, effects) {
-  return [
-    `${type}`,
-    `Participants: ${participants.join(", ")}`,
-    `Outcome: ${outcome}`,
-    `Severity: ${severity[0].toUpperCase() + severity.slice(1)}`,
-    `Effects: ${effects}`
-  ].join(" | ");
+function toSeverity(priority) {
+  return priority[0].toUpperCase() + priority.slice(1);
 }
 
-export function logEvent(state, { type = "event", participants = [], outcome = "Success", severity = "low", effects = "None", text }) {
-  const names = participants.map((id) => state.charactersById[id]?.firstName || "Unknown");
-  const entry = {
-    text: text || formatEvent(type, names, outcome, severity, effects),
+function formatEventEntry({ type, severity, who, whatHappened, resultLines }) {
+  const compactResults = resultLines.slice(0, 2).join("; ");
+  return {
+    fullText: `${eventTypeLabel(type)} — ${severity}\nWho: ${who.join(", ")}\nWhat Happened: ${whatHappened}\nResult: ${compactResults}`,
+    shortText: `${eventTypeLabel(type)} — ${severity} | ${whatHappened} | ${compactResults}`
+  };
+}
+
+function buildEvent(state, { type = "event", participants = [], priority = "low", whatHappened = "Update occurred", resultLines = [], outcome = "Success", visibility = "public" }) {
+  const who = participants.map((id) => state.charactersById[id]?.firstName || "Unknown");
+  const severity = toSeverity(priority);
+  const formatted = formatEventEntry({ type, severity, who, whatHappened, resultLines });
+  return {
     type,
     participants,
+    who,
     outcome,
-    severityLevel: severity,
-    effects,
+    priority,
+    severity,
+    visibility,
+    whatHappened,
+    resultLines,
+    text: priority === "high" ? formatted.fullText : formatted.shortText,
+    shortText: formatted.shortText,
+    fullText: formatted.fullText,
     time: `Y${state.year} M${state.month} D${state.monthDay}`
   };
-  state.events.unshift(entry);
-  state.feed.unshift(entry);
-  state.events = state.events.slice(0, 300);
-  state.feed = state.feed.slice(0, 120);
 }
 
+export function pushEvent(state, event) {
+  state.events.unshift(event);
+  state.events = state.events.slice(0, 500);
+}
+
+export function flushVisibleEvents(state) {
+  const cap = state.maxVisibleEventsPerDay || 3;
+  const pending = state.pendingVisibleEvents || [];
+  const ranked = ["high", "medium"].flatMap((priority) => pending.filter((e) => e.priority === priority));
+  state.feed = [...ranked.slice(0, cap), ...(state.feed || [])].slice(0, 120);
+  state.pendingVisibleEvents = [];
+}
+
+export function logEvent(state, payload) {
+  const event = buildEvent(state, payload);
+  pushEvent(state, event);
+  if (event.priority !== "low" && event.resultLines?.length) {
+    state.pendingVisibleEvents = state.pendingVisibleEvents || [];
+    state.pendingVisibleEvents.push(event);
+  }
+}
 
 function addMemory(character, memory) {
   character.memoryLog = character.memoryLog || [];
@@ -57,12 +95,14 @@ function addMemory(character, memory) {
   character.memoryLog = character.memoryLog.slice(0, 30);
 }
 
-function createRelationship(state, aId, bId, type, reason, strengthDelta = 5) {
+function createRelationship(state, aId, bId, type, reason, strengthDelta = 5, visibility = "public") {
   const a = state.charactersById[aId]; const b = state.charactersById[bId];
   if (!a || !b || a.status === "dead" || b.status === "dead") return;
   for (const [src, tgt] of [[a, b], [b, a]]) {
+    const current = (src.relationships || []).find((r) => r.targetId === tgt.id);
+    const updatedStrength = clamp((current?.strength || 0) + strengthDelta, -100, 100);
     src.relationships = (src.relationships || []).filter((r) => r.targetId !== tgt.id);
-    src.relationships.push({ targetId: tgt.id, type, strength: clamp(strengthDelta, -100, 100), originReason: reason });
+    src.relationships.push({ targetId: tgt.id, type, strength: updatedStrength, visibility, originReason: reason });
   }
 }
 
@@ -92,52 +132,33 @@ export function startPregnancy(state, parentA, parentB, via = "ai") {
   const mother = parentA.gender === "female" ? parentA : parentB.gender === "female" ? parentB : null;
   const father = mother?.id === parentA.id ? parentB : parentA;
   if (!mother || !father || mother.pregnancy) return false;
-
   const family = state.familiesById[mother.familyId];
   const chance = conceptionChance(mother, father, family);
-  const success = Math.random() < chance;
-  if (!success) {
-    createRelationship(state, mother.id, father.id, "strained", "conception-failed", -4);
-    logEvent(state, { type: "Childbirth", participants: [mother.id, father.id], outcome: "Failure", severity: "low", effects: "No pregnancy; relationship tension increased." });
-    return false;
-  }
-
+  if (Math.random() >= chance) return false;
   const duration = 270 + Math.floor((Math.random() * 41) - 20);
   const riskLevel = pregnancyRisk(mother, father);
   mother.pregnancy = { parentA: mother.id, parentB: father.id, startDate: `${state.year}-${state.month}-${state.monthDay}`, duration, daysLeft: duration, riskLevel, outcome: "pending", complications: [] };
-  const sev = calcSeverityLevel({ participants: 2, riskLevel, relationshipShift: 8 });
-  logEvent(state, { type: "Childbirth", participants: [mother.id, father.id], outcome: "Success", severity: sev, effects: `Pregnancy started (${duration} days, risk ${riskLevel}).` });
+  logEvent(state, { type: "childbirth", participants: [mother.id, father.id], priority: calcPriority({ participants: 2, riskLevel, relationshipShift: 8 }), whatHappened: "Pregnancy has begun.", resultLines: [`New status: pregnant (${riskLevel} risk)`], outcome: "Success", visibility: via === "rare" ? "public" : "private" });
   return true;
 }
 
-export function executeBirth(state, mother, father) {
+export function executeBirth(state, mother, father) { /* unchanged core + new logs */
   if (!mother?.pregnancy || !father || mother.status === "dead" || father.status === "dead") return;
   const risk = mother.pregnancy.riskLevel || "low";
-  const failRoll = Math.random();
   const failThreshold = risk === "high" ? 0.22 : risk === "medium" ? 0.12 : 0.05;
-
-  if (failRoll < failThreshold) {
-    mother.pregnancy.outcome = "failed";
-    mother.characterReputation = (mother.characterReputation || 0) - 1;
-    father.characterReputation = (father.characterReputation || 0) - 1;
-    createRelationship(state, mother.id, father.id, "strained", "pregnancy-loss", -10);
-    const fam = state.familiesById[mother.familyId];
-    if (fam) fam.reputation -= 1;
-    logEvent(state, { type: "Childbirth", participants: [mother.id, father.id], outcome: "Failure", severity: calcSeverityLevel({ participants: 2, repImpact: -1, relationshipShift: -10, riskLevel: risk }), effects: "Pregnancy loss; relationship strain; family reputation -1." });
+  if (Math.random() < failThreshold) {
+    createRelationship(state, mother.id, father.id, "Suspicious", "pregnancy-loss", -10, "private");
+    const fam = state.familiesById[mother.familyId]; if (fam) fam.reputation -= 1;
+    logEvent(state, { type: "childbirth", participants: [mother.id, father.id], priority: calcPriority({ participants: 2, repImpact: -1, relationshipShift: -10, riskLevel: risk }), whatHappened: "Pregnancy ended in loss.", resultLines: ["Relationship worsened (-10)", "Family reputation -1"], outcome: "Failure" });
     return;
   }
-
   const child = { id: `c${Date.now()}${Math.floor(Math.random() * 1000)}`, firstName: `Child${state.characters.length + 1}`, gender: Math.random() > 0.5 ? "male" : "female", age: 0, familyId: mother.familyId, originFamilyId: mother.familyId, maritalStatus: "not-married", health: "Healthy", status: "alive", intelligence: inheritScalar(state, mother, father, "intelligence", 0, 10), personality: ["ambition", "jealousy", "charm", "morality", "intelligence", "socialHunger", "loyalty", "riskTolerance"].reduce((acc, key) => ({ ...acc, [key]: inheritScalar(state, mother, father, key, 0, 10) }), {}), characterReputation: 0, relationships: [], parents: [mother.id, father.id], looks: { hair: inheritFeature(state, mother, father, "hair"), eyes: inheritFeature(state, mother, father, "eyes"), eyeColor: inheritFeature(state, mother, father, "eyeColor"), skin: inheritFeature(state, mother, father, "skin"), faceType: inheritFeature(state, mother, father, "faceType"), nose: inheritFeature(state, mother, father, "nose") } };
-  child.beautyBase = inheritScalar(state, mother, father, "beauty", 0, 10);
-  child.beauty = computeBeauty(child);
-  child.fertility = clamp(0.25 + Math.random() * 0.6, 0, 1);
-
+  child.beautyBase = inheritScalar(state, mother, father, "beauty", 0, 10); child.beauty = computeBeauty(child); child.fertility = clamp(0.25 + Math.random() * 0.6, 0, 1);
   state.characters.push(child); state.charactersById[child.id] = child;
-  const fam = state.familiesById[mother.familyId];
-  let repDelta = child.gender === "male" ? 2 : 1;
+  const fam = state.familiesById[mother.familyId]; const repDelta = child.gender === "male" ? 2 : 1;
   if (fam) { fam.reputation += repDelta; fam.children = fam.children || []; fam.children.push(child.id); }
-  createRelationship(state, mother.id, father.id, "bonded", "childbirth", 15);
-  logEvent(state, { type: "Childbirth", participants: [mother.id, father.id, child.id], outcome: "Success", severity: calcSeverityLevel({ participants: 3, repImpact: repDelta, relationshipShift: 15, riskLevel: risk }), effects: `Child created (${child.firstName}, ${child.gender}); family reputation +${repDelta}.` });
+  createRelationship(state, mother.id, father.id, "Protective", "childbirth", 15);
+  logEvent(state, { type: "childbirth", participants: [mother.id, father.id, child.id], priority: calcPriority({ participants: 3, repImpact: repDelta, relationshipShift: 15, riskLevel: risk }), whatHappened: `A child was born: ${child.firstName}.`, resultLines: [`Relationship improved (+15)`, `Family reputation +${repDelta}`], outcome: "Success" });
 }
 
 export function updateRelationshipState(state) { state.characters.forEach((c) => { c.relationships = (c.relationships || []).map((r) => ({ ...r, strength: clamp((r.strength ?? 0) + (Math.random() > 0.5 ? 1 : -1), -100, 100) })); }); }
@@ -146,45 +167,58 @@ function executeDeath(state, character) {
   character.status = "dead";
   for (const c of state.characters) {
     if (c.spouseId === character.id) {
-      c.spouseId = null;
-      c.maritalStatus = "widowed";
-      c.relationships = (c.relationships || []).map((r) => r.targetId === character.id ? { ...r, type: "deceased spouse", originReason: "death" } : r);
-      c.characterReputation = (c.characterReputation || 0) - 1;
-      addMemory(c, `Lost spouse ${character.firstName}`);
+      c.spouseId = null; c.maritalStatus = "widowed";
+      c.relationships = (c.relationships || []).map((r) => r.targetId === character.id ? { ...r, type: "Enemy", originReason: "death" } : r);
     }
   }
-  character.spouseId = null;
-  character.maritalStatus = "deceased";
-  addMemory(character, "Died suddenly");
-  logEvent(state, { type: "Death", participants: [character.id], outcome: "Success", severity: "high", effects: "Spouse statuses updated to widowed; marriage links removed." });
+  character.spouseId = null; character.maritalStatus = "deceased";
+  logEvent(state, { type: "death", participants: [character.id], priority: "high", whatHappened: `${character.firstName} died unexpectedly.`, resultLines: ["New status: deceased", "Spouses become widowed"], outcome: "Success" });
 }
 
 export function generateEvent(state) {
   const living = state.characters.filter((c) => c.status !== "dead" && c.age >= 10);
   if (living.length < 2) return;
+  if (living.length && Math.random() < 0.015) {
+    const elderPool = living.filter((c) => c.age >= 45);
+    const candidate = elderPool.length ? randomFrom(elderPool) : randomFrom(living);
+    return executeDeath(state, candidate);
+  }
   const category = randomFrom(EVENT_TYPES);
   const p1 = randomFrom(living);
-  const p2 = living.find((c) => c.id !== p1.id && c.age >= 10);
+  const pool = living.filter((c) => c.id !== p1.id);
+  const weighted = pool.sort((a, b) => (((p1.relationships || []).find((r) => r.targetId === b.id)?.strength || 0) - (((p1.relationships || []).find((r) => r.targetId === a.id)?.strength || 0))));
+  const p2 = Math.random() < 0.6 ? weighted[0] : randomFrom(pool);
   if (!p2) return;
 
   let outcome = randomFrom(EVENT_POOL[category]);
-  const last = state.lastEventByPair?.[`${p1.id}:${p2.id}`];
+  const key = `${p1.id}:${p2.id}:${category}`;
+  const last = state.lastEventByPair?.[key];
   if (last === outcome) {
     const options = EVENT_POOL[category].filter((x) => x !== last);
     outcome = randomFrom(options.length ? options : EVENT_POOL[category]);
   }
-  state.lastEventByPair = state.lastEventByPair || {};
-  state.lastEventByPair[`${p1.id}:${p2.id}`] = outcome;
+  state.lastEventByPair = state.lastEventByPair || {}; state.lastEventByPair[key] = outcome;
 
   if (category === "rare" && outcome === "sudden death") return executeDeath(state, p1);
   if (category === "rare" && outcome === "unexpected pregnancy") startPregnancy(state, p1, p2, "rare");
 
   const repDelta = category === "scandal" || category === "conflict" ? -3 : 2;
   const relationshipShift = category === "romantic" ? 12 : category === "conflict" ? -12 : 6;
-  createRelationship(state, p1.id, p2.id, category === "romantic" ? "lover" : category === "conflict" ? "rival" : "friend", category, relationshipShift);
+  const visibility = category === "romantic" && outcome.includes("secret") ? "secret" : "public";
+  const relationType = randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
+  createRelationship(state, p1.id, p2.id, relationType, `${category}:${outcome}`, relationshipShift, visibility);
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += repDelta;
   if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += repDelta;
+
+  const priority = calcPriority({ participants: 2, repImpact: repDelta, relationshipShift, riskLevel: category === "rare" ? "high" : category === "scandal" ? "medium" : "low" });
+  const mergedWhat = category === "social" ? "Spent time together socially." : `${eventTypeLabel(category)} variation: ${outcome}.`;
+  const result = [
+    `Relationship ${relationshipShift >= 0 ? "improved" : "worsened"} (${relationshipShift >= 0 ? "+" : ""}${relationshipShift})`,
+    `Family reputation ${repDelta >= 0 ? "+" : ""}${repDelta}`,
+    `Relationship type: ${relationType} (${visibility})`
+  ];
+
   addMemory(p1, `${category}: ${outcome} with ${p2.firstName}`);
   addMemory(p2, `${category}: ${outcome} with ${p1.firstName}`);
-  logEvent(state, { type: category[0].toUpperCase() + category.slice(1), participants: [p1.id, p2.id], outcome: "Success", severity: calcSeverityLevel({ participants: 2, repImpact: repDelta, relationshipShift, riskLevel: category === "rare" ? "high" : category === "scandal" ? "medium" : "low" }), effects: `${outcome}; relationship and reputation updated.` });
+  logEvent(state, { type: category, participants: [p1.id, p2.id], priority, whatHappened: mergedWhat, resultLines: result, outcome: "Success", visibility });
 }

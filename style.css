@@ -28,3 +28,9 @@ body { margin: 0; font-family: Georgia, serif; background: var(--bg); color: var
 .close { position: absolute; right: 8px; top: 8px; }
 .statbar { display:inline-block; width: 110px; height: 10px; border: 1px solid var(--border); }
 .statbar > span { display:block; height:100%; background:#8a6b48; }
+
+.feed ul { list-style: none; padding-left: 0; }
+.feed-item { margin-bottom: 8px; padding: 6px 8px; border: 1px solid var(--border); white-space: pre-line; }
+.priority-high { border-color: #c89b4f; background: #2a1f0c; }
+.priority-medium { border-color: #6f624f; background: #1f1d1a; }
+.priority-low { opacity: 0.75; }
