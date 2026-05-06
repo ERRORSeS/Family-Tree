@@ -1,20 +1,44 @@
 import { decideAction } from "./ai.js";
 import { propagateGossip } from "./gossip.js";
 import { recalculateReputation } from "./reputation.js";
-import { executeBirth, logEvent, generateEvent, updateRelationshipState } from "./events.js";
+import { executeBirth, logEvent, generateEvent, updateRelationshipState, startPregnancy } from "./events.js";
 
 function processPregnancies(state) {
   const due = [];
   for (const c of state.characters) {
     if (c.status === "dead" || !c.pregnancy) continue;
     c.pregnancy.daysLeft -= 1;
+    if (Math.random() < 0.02 && c.pregnancy.riskLevel !== "low") c.pregnancy.complications.push("complication");
     if (c.pregnancy.daysLeft <= 0) due.push(c);
   }
   due.forEach((mother) => {
-    const father = state.charactersById[mother.pregnancy.fatherId];
+    const father = state.charactersById[mother.pregnancy.parentB];
     executeBirth(state, mother, father);
     mother.pregnancy = null;
   });
+}
+
+function runAutonomousActions(state) {
+  const adults = state.characters.filter((c) => c.status !== "dead" && c.age >= 16);
+  for (const c of adults) {
+    const candidates = adults.filter((x) => x.id !== c.id);
+    if (!candidates.length) continue;
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    const attraction = c.attractionScores?.[target.id] ?? Math.floor(Math.random() * 100);
+    const loyalty = c.personality?.loyalty ?? 5;
+    if (!c.spouseId && !target.spouseId && attraction > 75 && Math.random() < 0.06) {
+      c.spouseId = target.id; target.spouseId = c.id; c.maritalStatus = "married"; target.maritalStatus = "married";
+      logEvent(state, { type: "Marriage", participants: [c.id, target.id], outcome: "Success", severity: "medium", effects: "Autonomous marriage formed." });
+      continue;
+    }
+    if (c.spouseId && (loyalty < 3 || (c.personality?.jealousy ?? 5) > 8) && Math.random() < 0.04) {
+      const spouse = state.charactersById[c.spouseId];
+      if (spouse) { c.spouseId = null; spouse.spouseId = null; c.maritalStatus = "not-married"; spouse.maritalStatus = "not-married";
+        logEvent(state, { type: "Divorce", participants: [c.id, spouse.id], outcome: "Success", severity: "high", effects: "Autonomous divorce applied; reputation pressure increased." }); }
+      continue;
+    }
+    if (Math.random() < 0.05) startPregnancy(state, c, target, "ai");
+  }
 }
 
 export function advanceDay(state) {
@@ -40,18 +64,19 @@ export function tickSimulation(state, scope = "day") {
   }
   if (scope === "day") {
     processPregnancies(state);
+    runAutonomousActions(state);
     generateEvent(state);
     updateRelationshipState(state);
     propagateGossip(state);
-    logEvent(state, "Daily cycle: visits, gossip spread, and subtle relationship shifts.", "daily");
+    logEvent(state, { type: "Simulation", participants: [], outcome: "Success", severity: "low", effects: "Daily cycle processed: pregnancy, autonomous actions, gossip, reputation." });
   }
   if (scope === "month") {
     recalculateReputation(state);
-    logEvent(state, "Monthly cycle: reputation recalculation, romance progression, pregnancy checks.", "monthly");
+    logEvent(state, { type: "Simulation", outcome: "Success", severity: "low", effects: "Monthly cycle recalculated reputation." });
   }
   if (scope === "year") {
     state.characters.forEach((c) => c.age += 1);
     recalculateReputation(state);
-    logEvent(state, "Yearly cycle: aging, inheritance updates, marriage market refresh.", "yearly");
+    logEvent(state, { type: "Simulation", outcome: "Success", severity: "medium", effects: "Yearly cycle aged characters and refreshed social dynamics." });
   }
 }

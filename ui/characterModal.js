@@ -1,3 +1,4 @@
+import { startPregnancy } from "../core/events.js";
 function titleFor(character) { return character.gender === "male" ? "Sir" : "Lady"; }
 
 export function showCharacterModal(state, id, rerender) {
@@ -72,14 +73,7 @@ function executeAction(state, sourceId, action, targetId, rerender) {
     a.spouseId = null; b.spouseId = null; a.maritalStatus = "not-married"; b.maritalStatus = "not-married";
     addRel(a, b, "ex", -25, "divorce"); a.characterReputation -= 3; b.characterReputation -= 3;
   }
-  if (action === "child") {
-    const success = Math.random() < 0.5;
-    if (success) {
-      const mother = a.gender === "female" ? a : b.gender === "female" ? b : null;
-      const father = mother?.id === a.id ? b : a;
-      if (mother) mother.pregnancy = { fatherId: father.id, daysLeft: 270 + Math.floor(Math.random() * 31) };
-    }
-  }
+  if (action === "child") startPregnancy(state, a, b, "player");
   if (action === "talk") addRel(a, b, "acquaintance", Math.random() > 0.5 ? 6 : -4, "talk");
   if (action === "gossip") addRel(a, b, "rival", Math.random() > 0.6 ? 7 : -8, "gossip");
   state.feed.unshift({ text: `${a.firstName} executed ${action} with ${b.firstName}.`, type: "player", time: "now" });
