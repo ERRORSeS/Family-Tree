@@ -1,7 +1,10 @@
 export function renderFamilies(state, handlers) {
   const view = document.getElementById("mainView");
   view.innerHTML = "<h2>Families</h2>";
-  if (!state.families.length) return (view.innerHTML += "<p>No families yet.</p>");
+  if (!state.families.length) {
+    view.innerHTML += "<p>No families yet. Go to Actions and create one.</p>";
+    return;
+  }
 
   for (const fam of state.families) {
     const card = document.createElement("div");
@@ -17,10 +20,17 @@ export function renderFamilies(state, handlers) {
       widowed: chars.filter((c) => c.maritalStatus === "widowed"),
       kids: chars.filter((c) => c.age < 16)
     };
+
     Object.entries(groups).forEach(([k, arr]) => {
       const d = document.createElement("details");
       d.innerHTML = `<summary>${k[0].toUpperCase() + k.slice(1)} (${arr.length})</summary>`;
-      arr.forEach((c) => { const p = document.createElement("div"); p.className = "person"; p.textContent = `• ${c.firstName} (${c.age})`; p.onclick = () => handlers.onCharacterClick(c.id); d.appendChild(p); });
+      arr.forEach((c) => {
+        const p = document.createElement("div");
+        p.className = "person";
+        p.textContent = `• ${c.firstName} (${c.age})`;
+        p.onclick = () => handlers.onCharacterClick(c.id);
+        d.appendChild(p);
+      });
       card.appendChild(d);
     });
 
@@ -38,10 +48,28 @@ export function renderFamilies(state, handlers) {
       <label>Social Hunger <input id='social-${fam.id}' type='range' min='0' max='10' value='5'></label>
       <button id='add-${fam.id}'>Add Character</button>`;
       card.appendChild(editor);
-      setTimeout(() => { document.getElementById(`add-${fam.id}`).onclick = () => handlers.onCreateCharacter({
-        firstName: document.getElementById(`name-${fam.id}`).value || "Unnamed", gender: document.getElementById(`gender-${fam.id}`).value, age: Number(document.getElementById(`age-${fam.id}`).value), beauty: Number(document.getElementById(`beauty-${fam.id}`).value), intelligence: Number(document.getElementById(`intel-${fam.id}`).value),
-        personality: { ambition: Number(document.getElementById(`amb-${fam.id}`).value), jealousy: Number(document.getElementById(`jeal-${fam.id}`).value), charm: Number(document.getElementById(`charm-${fam.id}`).value), morality: Number(document.getElementById(`mor-${fam.id}`).value), intelligence: Number(document.getElementById(`intel-${fam.id}`).value), socialHunger: Number(document.getElementById(`social-${fam.id}`).value), loyalty: 5, riskTolerance: 5 }
-      }); };
+
+      setTimeout(() => {
+        const addBtn = document.getElementById(`add-${fam.id}`);
+        if (!addBtn) return;
+        addBtn.onclick = () => handlers.onCreateCharacter({
+          firstName: document.getElementById(`name-${fam.id}`).value || "Unnamed",
+          gender: document.getElementById(`gender-${fam.id}`).value,
+          age: Number(document.getElementById(`age-${fam.id}`).value),
+          beauty: Number(document.getElementById(`beauty-${fam.id}`).value),
+          intelligence: Number(document.getElementById(`intel-${fam.id}`).value),
+          personality: {
+            ambition: Number(document.getElementById(`amb-${fam.id}`).value),
+            jealousy: Number(document.getElementById(`jeal-${fam.id}`).value),
+            charm: Number(document.getElementById(`charm-${fam.id}`).value),
+            morality: Number(document.getElementById(`mor-${fam.id}`).value),
+            intelligence: Number(document.getElementById(`intel-${fam.id}`).value),
+            socialHunger: Number(document.getElementById(`social-${fam.id}`).value),
+            loyalty: 5,
+            riskTolerance: 5
+          }
+        });
+      });
     }
 
     view.appendChild(card);

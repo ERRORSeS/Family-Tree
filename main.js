@@ -14,10 +14,20 @@ function resetGame() { localStorage.removeItem("family-tree-save"); location.rel
 function loadGame() {
   const raw = localStorage.getItem("family-tree-save");
   if (!raw) return false;
-  Object.assign(state, JSON.parse(raw));
-  state.familiesById = Object.fromEntries(state.families.map((f) => [f.id, f]));
-  state.charactersById = Object.fromEntries(state.characters.map((c) => [c.id, c]));
-  return true;
+  try {
+    const parsed = JSON.parse(raw);
+    Object.assign(state, parsed);
+    if (!Array.isArray(state.families)) state.families = [];
+    if (!Array.isArray(state.characters)) state.characters = [];
+    if (!Array.isArray(state.feed)) state.feed = [];
+    if (!Array.isArray(state.events)) state.events = [];
+    state.familiesById = Object.fromEntries(state.families.map((f) => [f.id, f]));
+    state.charactersById = Object.fromEntries(state.characters.map((c) => [c.id, c]));
+    return true;
+  } catch {
+    localStorage.removeItem("family-tree-save");
+    return false;
+  }
 }
 
 function init() {
@@ -27,8 +37,8 @@ function init() {
     state.events = [];
     state.feed = [{ text: "World is empty. Create the first family to begin.", type: "system", time: "start" }];
   }
-  state.familiesById = Object.fromEntries(state.families.map((f) => [f.id, f]));
-  state.charactersById = Object.fromEntries(state.characters.map((c) => [c.id, c]));
+  state.familiesById = Object.fromEntries((state.families || []).map((f) => [f.id, f]));
+  state.charactersById = Object.fromEntries((state.characters || []).map((c) => [c.id, c]));
   bindUI();
   render();
   setInterval(() => { if (state.autoplay && !state.paused) { advanceDay(state); render(); saveGame(); } }, 1500);

@@ -64,7 +64,7 @@ function executeBirth(state, parentA, parentB) {
   state.charactersById[child.id] = child;
   const married = !!(parentB && parentA.spouseId === parentB.id && parentB.spouseId === parentA.id);
   if (married) {
-    state.familiesById[parentA.familyId].reputation += 1;
+    if (state.familiesById[parentA.familyId]) state.familiesById[parentA.familyId].reputation += 1;
     createRelationship(state, parentA.id, parentB.id, "married", "birth", 20);
   } else {
     parentA.characterReputation -= 3;
@@ -103,8 +103,8 @@ export function generateEvent(state) {
   p1.characterReputation += type === "scandal" ? -2 : 1;
   p2.characterReputation += type === "scandal" ? -2 : 1;
   updateRelationsFromEvent(state, p1, p2, type);
-  state.familiesById[p1.familyId].reputation += type === "scandal" ? -1 : 1;
-  state.familiesById[p2.familyId].reputation += type === "scandal" ? -1 : 1;
-  state.familiesById[p1.familyId].gossipLevel = (state.familiesById[p1.familyId].gossipLevel || 0) + 1;
+  if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += type === "scandal" ? -1 : 1;
+  if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += type === "scandal" ? -1 : 1;
+  if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].gossipLevel = (state.familiesById[p1.familyId].gossipLevel || 0) + 1;
   logEvent(state, `${type[0].toUpperCase() + type.slice(1)}: ${p1.firstName} and ${p2.firstName} reshaped court dynamics.`, type, participants.map((p) => p.id));
 }
