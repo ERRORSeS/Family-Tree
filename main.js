@@ -78,12 +78,26 @@ function createCharacter(data) { if (!state.activeFamilyId) return; const id = `
 function modifyFamily(field, amount) { const f = state.familiesById[state.activeFamilyId]; if (!f) return; f[field] += amount; state.feed.unshift({ text: `${f.name} ${field} changed by ${amount}.`, type: "player", time: "now" }); render(); saveGame(); }
 function renameFamily(name) { const f = state.familiesById[state.activeFamilyId]; if (!f) return; f.name = name; render(); saveGame(); }
 function deleteFamily(familyId) {
-  state.families = state.families.filter((f) => f.id !== familyId);
+  const family = state.familiesById[familyId];
+  if (!family) return;
+  const members = state.characters.filter((c) => c.familyId === familyId);
+  const memberIds = new Set(members.map((m) => m.id));
+  const linkedRelationships = state.characters.reduce((count, c) => count + ((c.relationships || []).filter((r) => memberIds.has(r.targetId)).length), 0);
+  const inheritanceLinks = state.characters.filter((c) => (c.parents || []).some((p) => memberIds.has(p))).length;
+  const warning = `Delete permanently? ${members.length} characters removed, ${linkedRelationships} relationships broken, ${inheritanceLinks} inheritance links affected.`;
+  if (!window.confirm(warning)) return;
+
   state.characters = state.characters.filter((c) => c.familyId !== familyId);
+  for (const c of state.characters) {
+    c.relationships = (c.relationships || []).filter((r) => !memberIds.has(r.targetId));
+    if ((c.parents || []).some((p) => memberIds.has(p))) c.parents = (c.parents || []).filter((p) => !memberIds.has(p));
+  }
+  state.families = state.families.filter((f) => f.id !== familyId);
+  state.relationships = (state.relationships || []).filter((r) => !memberIds.has(r.a) && !memberIds.has(r.b));
   state.familiesById = Object.fromEntries(state.families.map((f) => [f.id, f]));
   state.charactersById = Object.fromEntries(state.characters.map((c) => [c.id, c]));
   if (state.activeFamilyId === familyId) state.activeFamilyId = state.families[0]?.id || null;
-  state.feed.unshift({ text: "A family was removed from society.", type: "player", time: "now" });
+  state.feed.unshift({ text: `House deletion: ${family.name} removed. Society reacts with major gossip.`, type: "player", time: "now" });
   render();
   saveGame();
 }

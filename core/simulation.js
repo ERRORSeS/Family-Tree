@@ -34,7 +34,10 @@ export function advanceYear(state, fromMonth = false) {
 }
 
 export function tickSimulation(state, scope = "day") {
-  for (const c of state.characters) c.currentActivity = decideAction(state, c);
+  for (const c of state.characters) {
+    if (c.age < 10) { c.currentActivity = "inactive (child)"; continue; }
+    c.currentActivity = decideAction(state, c);
+  }
   if (scope === "day") {
     processPregnancies(state);
     generateEvent(state);
