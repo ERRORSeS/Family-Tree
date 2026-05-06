@@ -22,6 +22,13 @@ const RELATIONSHIP_MAP = {
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const randomFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const eventTypeLabel = (type) => type.toUpperCase().replace(/_/g, " ");
+const isCloseRelative = (a, b) => {
+  const aParents = new Set(a?.parents || []);
+  const bParents = new Set(b?.parents || []);
+  if ([...aParents].some((p) => bParents.has(p))) return true;
+  if (aParents.has(b?.id) || bParents.has(a?.id)) return true;
+  return false;
+};
 
 function calcPriority({ participants = 2, repImpact = 0, relationshipShift = 0, riskLevel = "low" } = {}) {
   let score = 0;
@@ -95,14 +102,17 @@ function addMemory(character, memory) {
   character.memoryLog = character.memoryLog.slice(0, 30);
 }
 
-function createRelationship(state, aId, bId, type, reason, strengthDelta = 5, visibility = "public") {
+function createRelationship(state, aId, bId, type, reason, strengthDelta = 5, visibility = "public", traitDelta = {}) {
   const a = state.charactersById[aId]; const b = state.charactersById[bId];
   if (!a || !b || a.status === "dead" || b.status === "dead") return;
   for (const [src, tgt] of [[a, b], [b, a]]) {
     const current = (src.relationships || []).find((r) => r.targetId === tgt.id);
     const updatedStrength = clamp((current?.strength || 0) + strengthDelta, -100, 100);
+    const updatedAttraction = clamp((current?.attraction || 0) + (traitDelta.attraction ?? 0), -100, 100);
+    const updatedTrust = clamp((current?.trust ?? 50) + (traitDelta.trust ?? 0), 0, 100);
+    const updatedFamiliarity = clamp((current?.familiarity ?? 10) + (traitDelta.familiarity ?? 0), 0, 100);
     src.relationships = (src.relationships || []).filter((r) => r.targetId !== tgt.id);
-    src.relationships.push({ targetId: tgt.id, type, strength: updatedStrength, visibility, originReason: reason });
+    src.relationships.push({ targetId: tgt.id, type, strength: updatedStrength, attraction: updatedAttraction, trust: updatedTrust, familiarity: updatedFamiliarity, visibility, originReason: reason });
   }
 }
 
@@ -144,6 +154,7 @@ export function attemptChild(state, parentA, parentB, via = "ai") {
   const mother = parentA.gender === "female" ? parentA : parentB.gender === "female" ? parentB : null;
   const father = mother?.id === parentA.id ? parentB : parentA;
   if (!mother || !father || mother.pregnancy) return false;
+  if (mother.spouseId !== father.id || father.spouseId !== mother.id) return false;
   const family = state.familiesById[mother.familyId];
   const chance = conceptionChance(mother, father, family);
   const relationshipShift = Math.random() < 0.8 ? 2 : -2;
@@ -185,7 +196,7 @@ export function executeBirth(state, mother, father) {
 export function completePregnancy(state, pregnancy, mother, father) {
   if (!mother?.pregnancy || !father || mother.status === "dead" || father.status === "dead") return;
   const risk = pregnancy?.riskLevel || "low";
-  const failThreshold = risk === "high" ? 0.22 : risk === "medium" ? 0.12 : 0.05;
+  const failThreshold = risk === "high" ? 0.1 : risk === "medium" ? 0.05 : 0.02;
   if (Math.random() < failThreshold) {
     createRelationship(state, mother.id, father.id, "Suspicious", "pregnancy-loss", -10, "private");
     const fam = state.familiesById[mother.familyId]; if (fam) fam.reputation -= 1;
@@ -199,15 +210,35 @@ export function completePregnancy(state, pregnancy, mother, father) {
   state.characters.push(child); state.charactersById[child.id] = child;
   const fam = state.familiesById[mother.familyId]; const repDelta = child.gender === "male" ? 2 : 1;
   if (fam) { fam.reputation += repDelta; fam.children = fam.children || []; fam.children.push(child.id); }
+  const marriedBirth = mother.spouseId === father.id && father.spouseId === mother.id;
+  if (marriedBirth) {
+    mother.characterReputation = (mother.characterReputation ?? 0) + 2;
+    father.characterReputation = (father.characterReputation ?? 0) + 2;
+  } else {
+    mother.characterReputation = (mother.characterReputation ?? 0) - 12;
+    father.characterReputation = (father.characterReputation ?? 0) - 12;
+    if (fam) fam.reputation -= 10;
+    logEvent(state, { type: "scandal", participants: [mother.id, father.id], priority: "high", whatHappened: "A child was born outside of marriage.", resultLines: ["Severe reputation damage", "Gossip spread widely", "Future marriage prospects reduced"], outcome: "Success", visibility: "public" });
+  }
   createRelationship(state, mother.id, father.id, "Protective", "childbirth", 15);
   createRelationship(state, mother.id, child.id, "Protective", "parent-child", 35);
   createRelationship(state, father.id, child.id, "Protective", "parent-child", 35);
-  logEvent(state, { type: "birth", participants: [mother.id, father.id, child.id], priority: "high", whatHappened: "A child was born.", resultLines: ["Outcome: Successful birth", "New child added to family"], outcome: "Success" });
+  logEvent(state, { type: "birth", participants: [mother.id, father.id, child.id], priority: "high", whatHappened: `${mother.firstName} gave birth to ${child.firstName}.`, resultLines: [`Child: ${child.gender}, age 0`, "Pregnancy completed and child added to family"], outcome: "Success" });
   mother.pregnancy = null;
   if (state.pregnancies) state.pregnancies = state.pregnancies.filter((p) => p !== pregnancy);
 }
 
-export function updateRelationshipState(state) { state.characters.forEach((c) => { c.relationships = (c.relationships || []).map((r) => ({ ...r, strength: clamp((r.strength ?? 0) + (Math.random() > 0.5 ? 1 : -1), -100, 100) })); }); }
+export function updateRelationshipState(state) {
+  state.characters.forEach((c) => {
+    c.relationships = (c.relationships || []).map((r) => ({
+      ...r,
+      strength: clamp((r.strength ?? 0) + (Math.random() > 0.5 ? 1 : -1), -100, 100),
+      trust: clamp((r.trust ?? 50) + (Math.random() > 0.55 ? 1 : -1), 0, 100),
+      familiarity: clamp((r.familiarity ?? 10) + 1, 0, 100),
+      attraction: clamp((r.attraction ?? 0) + (Math.random() > 0.75 ? 1 : 0), -100, 100)
+    }));
+  });
+}
 
 function executeDeath(state, character) {
   character.status = "dead";
@@ -221,13 +252,25 @@ function executeDeath(state, character) {
   logEvent(state, { type: "death", participants: [character.id], priority: "high", whatHappened: `${character.firstName} died unexpectedly.`, resultLines: ["New status: deceased", "Spouses become widowed"], outcome: "Success" });
 }
 
+function maybeTriggerHealthDecline(state, character) {
+  if (character.status === "dead") return false;
+  const ageRisk = character.age >= 50 ? Math.min(0.015 + ((character.age - 50) * 0.0012), 0.07) : 0;
+  const healthRisk = character.health === "Critical" ? 0.02 : character.health === "Ill" ? 0.008 : character.health === "Dying" ? 0.05 : 0;
+  if (Math.random() >= ageRisk + healthRisk) return false;
+  character.healthDecline = true;
+  logEvent(state, { type: "health decline", participants: [character.id], priority: "medium", whatHappened: "Their health has worsened.", resultLines: ["Increased risk of death"], outcome: "Success" });
+  return true;
+}
+
 export function generateEvent(state) {
   const living = state.characters.filter((c) => c.status !== "dead" && c.age >= 10);
   if (living.length < 2) return;
-  if (living.length && Math.random() < 0.015) {
-    const elderPool = living.filter((c) => c.age >= 45);
-    const candidate = elderPool.length ? randomFrom(elderPool) : randomFrom(living);
-    return executeDeath(state, candidate);
+  if (living.length) {
+    const candidate = randomFrom(living);
+    maybeTriggerHealthDecline(state, candidate);
+    const declineFactor = candidate.healthDecline ? 1 : 0;
+    const deathRisk = (candidate.age >= 50 ? Math.min(0.0008 + ((candidate.age - 50) * 0.0003), 0.012) : 0.0001) + (candidate.health === "Dying" ? 0.015 : candidate.health === "Critical" ? 0.006 : 0) + (declineFactor * 0.004);
+    if (Math.random() < deathRisk) return executeDeath(state, candidate);
   }
   const category = randomFrom(EVENT_TYPES);
   const p1 = randomFrom(living);
@@ -248,12 +291,16 @@ export function generateEvent(state) {
   state.lastEventByPair = state.lastEventByPair || {}; state.lastEventByPair[key] = outcome;
 
   if (category === "rare" && outcome === "sudden death") return executeDeath(state, p1);
-  if (category === "rare" && outcome === "unexpected pregnancy") startPregnancy(state, p1, p2, "rare");
+  if (category === "rare" && outcome === "unexpected pregnancy" && p1.gender !== p2.gender && !isCloseRelative(p1, p2)) startPregnancy(state, p1, p2, "rare");
 
   const repDelta = category === "scandal" || category === "conflict" ? -3 : 2;
   const relationshipShift = category === "romantic" ? 12 : category === "conflict" ? -12 : 6;
   const visibility = category === "romantic" && outcome.includes("secret") ? "secret" : "public";
-  const relationType = sameGenderPair && category === "romantic" ? "Friendly" : randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
+  const blockedRomance = category === "romantic" && (sameGenderPair || isCloseRelative(p1, p2));
+  const relationType = blockedRomance ? "Friendly" : randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
+  if (blockedRomance) {
+    outcome = "awkward interaction";
+  }
   createRelationship(state, p1.id, p2.id, relationType, `${category}:${outcome}`, relationshipShift, visibility);
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += repDelta;
   if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += repDelta;
