@@ -1,20 +1,23 @@
 import { decideAction } from "./ai.js";
 import { propagateGossip } from "./gossip.js";
 import { recalculateReputation } from "./reputation.js";
-import { executeBirth, logEvent, generateEvent, updateRelationshipState, startPregnancy, flushVisibleEvents } from "./events.js";
+import { completePregnancy, logEvent, generateEvent, updateRelationshipState, attemptChild, flushVisibleEvents } from "./events.js";
 
 function processPregnancies(state) {
   const due = [];
+  state.pregnancies = state.pregnancies || [];
   for (const c of state.characters) {
     if (c.status === "dead" || !c.pregnancy) continue;
-    c.pregnancy.daysLeft -= 1;
-    if (Math.random() < 0.02 && c.pregnancy.riskLevel !== "low") c.pregnancy.complications.push("complication");
-    if (c.pregnancy.daysLeft <= 0) due.push(c);
+    c.pregnancy.monthsRemaining -= 1;
+    if (Math.random() < 0.06 && c.pregnancy.riskLevel !== "low") c.pregnancy.complications.push("complication");
+    if (Math.random() < 0.2) {
+      logEvent(state, { type: "pregnancy update", participants: [c.pregnancy.parentA, c.pregnancy.parentB], priority: "low", whatHappened: "Pregnancy is progressing.", resultLines: [`Months remaining: ${Math.max(0, c.pregnancy.monthsRemaining)}`], outcome: "Success", visibility: "private" });
+    }
+    if (c.pregnancy.monthsRemaining <= 0) due.push(c);
   }
   due.forEach((mother) => {
     const father = state.charactersById[mother.pregnancy.parentB];
-    executeBirth(state, mother, father);
-    mother.pregnancy = null;
+    completePregnancy(state, mother.pregnancy, mother, father);
   });
 }
 
@@ -37,7 +40,10 @@ function runAutonomousActions(state) {
         logEvent(state, { type: "divorce", participants: [c.id, spouse.id], priority: "high", outcome: "Success", whatHappened: "Marriage dissolved.", resultLines: ["New status: not-married", "Relationship reset"] }); }
       continue;
     }
-    if (Math.random() < 0.07) startPregnancy(state, c, target, "ai");
+    const spouse = c.spouseId ? state.charactersById[c.spouseId] : null;
+    const spouseRel = spouse ? (c.relationships || []).find((r) => r.targetId === spouse.id)?.strength ?? 0 : -100;
+    const eligibleAge = c.age >= 18 && c.age <= 45 && spouse && spouse.age >= 18 && spouse.age <= 55;
+    if (eligibleAge && spouseRel > 20 && Math.random() < 0.1) attemptChild(state, c, spouse, "ai");
   }
 }
 
@@ -71,6 +77,7 @@ export function tickSimulation(state, scope = "day") {
     flushVisibleEvents(state);
   }
   if (scope === "month") {
+    processPregnancies(state);
     recalculateReputation(state);
 
   }
