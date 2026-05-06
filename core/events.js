@@ -115,6 +115,16 @@ function createRelationship(state, aId, bId, type, reason, strengthDelta = 5, vi
     src.relationships.push({ targetId: tgt.id, type, strength: updatedStrength, attraction: updatedAttraction, trust: updatedTrust, familiarity: updatedFamiliarity, visibility, originReason: reason });
   }
 }
+function adjustRelationshipMetric(state, aId, bId, key, delta, min = -100, max = 100) {
+  const a = state.charactersById[aId];
+  const b = state.charactersById[bId];
+  if (!a || !b) return;
+  for (const [src, tgt] of [[a, b], [b, a]]) {
+    const rel = (src.relationships || []).find((r) => r.targetId === tgt.id);
+    if (!rel) continue;
+    rel[key] = clamp((rel[key] ?? 0) + delta, min, max);
+  }
+}
 
 function fertilityOf(character) {
   if (typeof character.fertility !== "number") character.fertility = clamp(0.35 + Math.random() * 0.5, 0, 1);
@@ -308,6 +318,16 @@ export function generateEvent(state) {
     outcome = "awkward interaction";
   }
   createRelationship(state, p1.id, p2.id, relationType, `${category}:${outcome}`, relationshipShift, visibility);
+  if (category === "romantic" && !blockedRomance && Math.random() < 0.12) {
+    const crushBoost = 20 + Math.floor(Math.random() * 21);
+    adjustRelationshipMetric(state, p1.id, p2.id, "attraction", crushBoost);
+  }
+  if (category === "scandal" && outcome === "affair discovered") {
+    const spouseA = p1.spouseId ? state.charactersById[p1.spouseId] : null;
+    const spouseB = p2.spouseId ? state.charactersById[p2.spouseId] : null;
+    if (spouseA) adjustRelationshipMetric(state, p1.id, spouseA.id, "attraction", -30);
+    if (spouseB) adjustRelationshipMetric(state, p2.id, spouseB.id, "attraction", -30);
+  }
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += repDelta;
   if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += repDelta;
 
