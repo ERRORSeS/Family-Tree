@@ -116,7 +116,14 @@ function conceptionChance(parentA, parentB, family) {
   const relationship = clamp((relStrength + 100) / 200, 0, 1);
   const health = ((parentA.health === "Healthy" ? 1 : 0.65) + (parentB.health === "Healthy" ? 1 : 0.65)) / 2;
   const scandalPenalty = clamp(((family?.scandal || 0) / 100) + ((family?.gossipLevel || 0) / 200), 0, 0.35);
-  return clamp((fertilityOf(parentA) + fertilityOf(parentB)) / 2 + relationship * 0.35 + health * 0.15 - scandalPenalty, 0.02, 0.95);
+  const ageFactor = (person) => {
+    const age = person.age || 18;
+    if (age < 18 || age > 50) return 0.35;
+    if (age <= 35) return 1;
+    return clamp(1 - ((age - 35) * 0.045), 0.45, 1);
+  };
+  const ageChance = (ageFactor(parentA) + ageFactor(parentB)) / 2;
+  return clamp(((fertilityOf(parentA) + fertilityOf(parentB)) / 2 + relationship * 0.35 + health * 0.15 - scandalPenalty) * ageChance, 0.02, 0.95);
 }
 
 function pregnancyRisk(parentA, parentB) {
@@ -128,28 +135,62 @@ function pregnancyRisk(parentA, parentB) {
 }
 
 export function startPregnancy(state, parentA, parentB, via = "ai") {
+  return attemptChild(state, parentA, parentB, via);
+}
+
+export function attemptChild(state, parentA, parentB, via = "ai") {
   if (!parentA || !parentB || parentA.status === "dead" || parentB.status === "dead") return false;
   const mother = parentA.gender === "female" ? parentA : parentB.gender === "female" ? parentB : null;
   const father = mother?.id === parentA.id ? parentB : parentA;
   if (!mother || !father || mother.pregnancy) return false;
   const family = state.familiesById[mother.familyId];
   const chance = conceptionChance(mother, father, family);
-  if (Math.random() >= chance) return false;
-  const duration = 270 + Math.floor((Math.random() * 41) - 20);
+  const relationshipShift = Math.random() < 0.8 ? 2 : -2;
+  createRelationship(state, mother.id, father.id, relationshipShift > 0 ? "Romantic Interest" : "Suspicious", "child-attempt", relationshipShift, "private");
+  if (Math.random() >= chance) {
+    logEvent(state, {
+      type: "child attempt",
+      participants: [mother.id, father.id],
+      priority: "medium",
+      whatHappened: `${mother.firstName} tried for a child with ${father.firstName}`,
+      resultLines: ["Outcome: Failure (no pregnancy)", `Relationship ${relationshipShift >= 0 ? "improved" : "worsened"} (${relationshipShift >= 0 ? "+" : ""}${relationshipShift})`],
+      outcome: "Failure",
+      visibility: via === "ai" ? "private" : "public"
+    });
+    return false;
+  }
+  const monthsRemaining = 9 + Math.floor(Math.random() * 2);
+  const daysRemaining = Math.floor(Math.random() * 31);
   const riskLevel = pregnancyRisk(mother, father);
-  mother.pregnancy = { parentA: mother.id, parentB: father.id, startDate: `${state.year}-${state.month}-${state.monthDay}`, duration, daysLeft: duration, riskLevel, outcome: "pending", complications: [] };
-  logEvent(state, { type: "childbirth", participants: [mother.id, father.id], priority: calcPriority({ participants: 2, riskLevel, relationshipShift: 8 }), whatHappened: "Pregnancy has begun.", resultLines: [`New status: pregnant (${riskLevel} risk)`], outcome: "Success", visibility: via === "rare" ? "public" : "private" });
+  mother.pregnancy = { parentA: mother.id, parentB: father.id, startDate: `${state.year}-${state.month}-${state.monthDay}`, monthsRemaining, daysRemaining, riskLevel, status: "active", outcome: "pending", complications: [] };
+  state.pregnancies = state.pregnancies || [];
+  state.pregnancies.push(mother.pregnancy);
+  logEvent(state, {
+    type: "child attempt",
+    participants: [mother.id, father.id],
+    priority: "medium",
+    whatHappened: `${mother.firstName} tried for a child with ${father.firstName}`,
+    resultLines: [`Outcome: Success (pregnancy started, ${riskLevel} risk)`, `Relationship ${relationshipShift >= 0 ? "improved" : "worsened"} (${relationshipShift >= 0 ? "+" : ""}${relationshipShift})`],
+    outcome: "Success",
+    visibility: via === "ai" ? "private" : "public"
+  });
   return true;
 }
 
-export function executeBirth(state, mother, father) { /* unchanged core + new logs */
+export function executeBirth(state, mother, father) {
+  return completePregnancy(state, mother?.pregnancy, mother, father);
+}
+
+export function completePregnancy(state, pregnancy, mother, father) {
   if (!mother?.pregnancy || !father || mother.status === "dead" || father.status === "dead") return;
-  const risk = mother.pregnancy.riskLevel || "low";
+  const risk = pregnancy?.riskLevel || "low";
   const failThreshold = risk === "high" ? 0.22 : risk === "medium" ? 0.12 : 0.05;
   if (Math.random() < failThreshold) {
     createRelationship(state, mother.id, father.id, "Suspicious", "pregnancy-loss", -10, "private");
     const fam = state.familiesById[mother.familyId]; if (fam) fam.reputation -= 1;
-    logEvent(state, { type: "childbirth", participants: [mother.id, father.id], priority: calcPriority({ participants: 2, repImpact: -1, relationshipShift: -10, riskLevel: risk }), whatHappened: "Pregnancy ended in loss.", resultLines: ["Relationship worsened (-10)", "Family reputation -1"], outcome: "Failure" });
+    logEvent(state, { type: "birth", participants: [mother.id, father.id], priority: "high", whatHappened: "Pregnancy failed.", resultLines: ["Outcome: No child", "Relationship strain and minor reputation impact"], outcome: "Failure" });
+    mother.pregnancy = null;
+    if (state.pregnancies) state.pregnancies = state.pregnancies.filter((p) => p !== pregnancy);
     return;
   }
   const child = { id: `c${Date.now()}${Math.floor(Math.random() * 1000)}`, firstName: `Child${state.characters.length + 1}`, gender: Math.random() > 0.5 ? "male" : "female", age: 0, familyId: mother.familyId, originFamilyId: mother.familyId, maritalStatus: "not-married", health: "Healthy", status: "alive", intelligence: inheritScalar(state, mother, father, "intelligence", 0, 10), personality: ["ambition", "jealousy", "charm", "morality", "intelligence", "socialHunger", "loyalty", "riskTolerance"].reduce((acc, key) => ({ ...acc, [key]: inheritScalar(state, mother, father, key, 0, 10) }), {}), characterReputation: 0, relationships: [], parents: [mother.id, father.id], looks: { hair: inheritFeature(state, mother, father, "hair"), eyes: inheritFeature(state, mother, father, "eyes"), eyeColor: inheritFeature(state, mother, father, "eyeColor"), skin: inheritFeature(state, mother, father, "skin"), faceType: inheritFeature(state, mother, father, "faceType"), nose: inheritFeature(state, mother, father, "nose") } };
@@ -158,7 +199,11 @@ export function executeBirth(state, mother, father) { /* unchanged core + new lo
   const fam = state.familiesById[mother.familyId]; const repDelta = child.gender === "male" ? 2 : 1;
   if (fam) { fam.reputation += repDelta; fam.children = fam.children || []; fam.children.push(child.id); }
   createRelationship(state, mother.id, father.id, "Protective", "childbirth", 15);
-  logEvent(state, { type: "childbirth", participants: [mother.id, father.id, child.id], priority: calcPriority({ participants: 3, repImpact: repDelta, relationshipShift: 15, riskLevel: risk }), whatHappened: `A child was born: ${child.firstName}.`, resultLines: [`Relationship improved (+15)`, `Family reputation +${repDelta}`], outcome: "Success" });
+  createRelationship(state, mother.id, child.id, "Protective", "parent-child", 35);
+  createRelationship(state, father.id, child.id, "Protective", "parent-child", 35);
+  logEvent(state, { type: "birth", participants: [mother.id, father.id, child.id], priority: "high", whatHappened: "A child was born.", resultLines: ["Outcome: Successful birth", "New child added to family"], outcome: "Success" });
+  mother.pregnancy = null;
+  if (state.pregnancies) state.pregnancies = state.pregnancies.filter((p) => p !== pregnancy);
 }
 
 export function updateRelationshipState(state) { state.characters.forEach((c) => { c.relationships = (c.relationships || []).map((r) => ({ ...r, strength: clamp((r.strength ?? 0) + (Math.random() > 0.5 ? 1 : -1), -100, 100) })); }); }
