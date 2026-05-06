@@ -4,7 +4,7 @@ import { renderFeed } from "./ui/eventFeed.js";
 import { setupTabs } from "./ui/tabs.js";
 import { showCharacterModal } from "./ui/characterModal.js";
 
-const state = { year: 1821, month: 3, monthDay: 12, phase: "Morning", tick: 0, events: [], feed: [], families: [], characters: [], relationships: [], globalReputation: 0, paused: true, autoplay: false, activeFamilyId: null, selectedCharacterId: null };
+const state = { year: 1821, month: 3, monthDay: 12, phase: "Morning", tick: 0, events: [], feed: [], families: [], characters: [], relationships: [], globalReputation: 0, paused: true, autoplay: false, activeFamilyId: null, selectedCharacterId: null, maxVisibleEventsPerDay: 3, pendingVisibleEvents: [] };
 
 function defaultFamily(name) { return { id: `f${Date.now()}`, name, wealth: 50, reputation: 0, status: "Unknown", scandal: 0, gossipLevel: 0 }; }
 
@@ -21,6 +21,8 @@ function loadGame() {
     if (!Array.isArray(state.characters)) state.characters = [];
     if (!Array.isArray(state.feed)) state.feed = [];
     if (!Array.isArray(state.events)) state.events = [];
+    if (!Array.isArray(state.pendingVisibleEvents)) state.pendingVisibleEvents = [];
+    if (!state.maxVisibleEventsPerDay) state.maxVisibleEventsPerDay = 3;
     state.familiesById = Object.fromEntries(state.families.map((f) => [f.id, f]));
     state.charactersById = Object.fromEntries(state.characters.map((c) => [c.id, c]));
     return true;
