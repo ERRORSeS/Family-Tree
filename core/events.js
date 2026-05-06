@@ -22,6 +22,13 @@ const RELATIONSHIP_MAP = {
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const randomFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const eventTypeLabel = (type) => type.toUpperCase().replace(/_/g, " ");
+const isCloseRelative = (a, b) => {
+  const aParents = new Set(a?.parents || []);
+  const bParents = new Set(b?.parents || []);
+  if ([...aParents].some((p) => bParents.has(p))) return true;
+  if (aParents.has(b?.id) || bParents.has(a?.id)) return true;
+  return false;
+};
 
 function calcPriority({ participants = 2, repImpact = 0, relationshipShift = 0, riskLevel = "low" } = {}) {
   let score = 0;
@@ -284,12 +291,16 @@ export function generateEvent(state) {
   state.lastEventByPair = state.lastEventByPair || {}; state.lastEventByPair[key] = outcome;
 
   if (category === "rare" && outcome === "sudden death") return executeDeath(state, p1);
-  if (category === "rare" && outcome === "unexpected pregnancy") startPregnancy(state, p1, p2, "rare");
+  if (category === "rare" && outcome === "unexpected pregnancy" && p1.gender !== p2.gender && !isCloseRelative(p1, p2)) startPregnancy(state, p1, p2, "rare");
 
   const repDelta = category === "scandal" || category === "conflict" ? -3 : 2;
   const relationshipShift = category === "romantic" ? 12 : category === "conflict" ? -12 : 6;
   const visibility = category === "romantic" && outcome.includes("secret") ? "secret" : "public";
-  const relationType = sameGenderPair && category === "romantic" ? "Friendly" : randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
+  const blockedRomance = category === "romantic" && (sameGenderPair || isCloseRelative(p1, p2));
+  const relationType = blockedRomance ? "Friendly" : randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
+  if (blockedRomance) {
+    outcome = "awkward interaction";
+  }
   createRelationship(state, p1.id, p2.id, relationType, `${category}:${outcome}`, relationshipShift, visibility);
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += repDelta;
   if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += repDelta;

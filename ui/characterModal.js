@@ -1,5 +1,22 @@
 import { startPregnancy } from "../core/events.js";
 function titleFor(character) { return character.gender === "male" ? "Sir" : "Lady"; }
+function isCloseRelative(a, b) {
+  const aParents = new Set(a?.parents || []);
+  const bParents = new Set(b?.parents || []);
+  if ([...aParents].some((p) => bParents.has(p))) return true;
+  if (aParents.has(b?.id) || bParents.has(a?.id)) return true;
+  return false;
+}
+function treeNames(state, ids = []) {
+  return ids.map((id) => state.charactersById[id]?.firstName || "Unknown").join(", ") || "Unknown";
+}
+function ancestorLevel(state, character, depth = 1) {
+  let current = character?.parents || [];
+  for (let i = 1; i < depth; i++) {
+    current = current.flatMap((id) => state.charactersById[id]?.parents || []);
+  }
+  return current;
+}
 
 export function showCharacterModal(state, id, rerender) {
   const c = state.charactersById[id];
@@ -14,6 +31,14 @@ export function showCharacterModal(state, id, rerender) {
   }).join("");
   const pregnancy = c.pregnancy ? `<h3>Pregnancy</h3>
   <p>Status: Pregnant | Months Remaining: ${c.pregnancy.monthsRemaining} | Father: ${state.charactersById[c.pregnancy.parentB]?.firstName || "Unknown"} | Risk Level: ${c.pregnancy.riskLevel?.[0]?.toUpperCase()}${c.pregnancy.riskLevel?.slice(1)}</p>` : "";
+  const p = ancestorLevel(state, c, 1);
+  const gp = ancestorLevel(state, c, 2);
+  const ggp = ancestorLevel(state, c, 3);
+  const familyTree = `<details><summary>Open/Close Family Tree</summary>
+  <p>Parents: ${treeNames(state, p)}</p>
+  <p>Grandparents: ${treeNames(state, gp)}</p>
+  <p>Great-Grandparents: ${treeNames(state, ggp)}</p>
+  </details>`;
 
   el.innerHTML = `<h2>${titleFor(c)} ${c.firstName}</h2>
   <h3>Identity</h3>
@@ -23,6 +48,7 @@ export function showCharacterModal(state, id, rerender) {
   <p>Looks: Hair ${c.looks?.hair || "unknown"} | Skin ${c.looks?.skin || "unknown"} | Eyes ${c.looks?.eyes || "unknown"} (${c.looks?.eyeColor || "unknown"})</p>
   <p>Traits: ${Object.entries(c.personality || {}).map(([k,v]) => `${k}:${v}`).join(", ")}</p>
   ${pregnancy}
+  ${familyTree}
   <h3>Edit</h3>
   <input id='renameCharacter' value='${c.firstName}' /> <button id='saveCharacterName'>Save Character Name</button>
   <input id='renameFamily' value='${family}' /> <button id='saveFamilyName'>Save Family Name</button>
@@ -38,8 +64,8 @@ export function showCharacterModal(state, id, rerender) {
   const refill = () => {
     const candidates = state.characters.filter((x) => x.id !== c.id && x.status !== "dead").filter((x) => {
       if (typeEl.value === "divorce") return c.spouseId === x.id;
-      if (typeEl.value === "child") return c.spouseId === x.id || (c.relationships || []).some((r) => r.targetId === x.id && (r.type === "lover" || r.strength > 30));
-      if (typeEl.value === "marriage") return !c.spouseId && !x.spouseId && c.age >= 16 && x.age >= 16;
+      if (typeEl.value === "child") return c.spouseId === x.id && c.gender !== x.gender && !isCloseRelative(c, x);
+      if (typeEl.value === "marriage") return !c.spouseId && !x.spouseId && c.age >= 16 && x.age >= 16 && c.gender !== x.gender && !isCloseRelative(c, x);
       return true;
     });
     targetEl.innerHTML = candidates.map((x) => `<option value='${x.id}'>${x.firstName} (${x.age})</option>`).join("");
