@@ -1,7 +1,7 @@
 import { decideAction } from "./ai.js";
 import { propagateGossip } from "./gossip.js";
 import { recalculateReputation } from "./reputation.js";
-import { logEvent, generateEvent } from "./events.js";
+import { logEvent, generateEvent, updateRelationshipState } from "./events.js";
 
 export function advanceDay(state) {
   state.monthDay += 1;
@@ -23,6 +23,7 @@ export function tickSimulation(state, scope = "day") {
   for (const c of state.characters) c.currentActivity = decideAction(state, c);
   if (scope === "day") {
     generateEvent(state);
+    updateRelationshipState(state);
     propagateGossip(state);
     logEvent(state, "Daily cycle: visits, gossip spread, and subtle relationship shifts.", "daily");
   }
