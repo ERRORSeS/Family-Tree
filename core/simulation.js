@@ -1,7 +1,21 @@
 import { decideAction } from "./ai.js";
 import { propagateGossip } from "./gossip.js";
 import { recalculateReputation } from "./reputation.js";
-import { logEvent, generateEvent, updateRelationshipState } from "./events.js";
+import { executeBirth, logEvent, generateEvent, updateRelationshipState } from "./events.js";
+
+function processPregnancies(state) {
+  const due = [];
+  for (const c of state.characters) {
+    if (c.status === "dead" || !c.pregnancy) continue;
+    c.pregnancy.daysLeft -= 1;
+    if (c.pregnancy.daysLeft <= 0) due.push(c);
+  }
+  due.forEach((mother) => {
+    const father = state.charactersById[mother.pregnancy.fatherId];
+    executeBirth(state, mother, father);
+    mother.pregnancy = null;
+  });
+}
 
 export function advanceDay(state) {
   state.monthDay += 1;
@@ -22,6 +36,7 @@ export function advanceYear(state, fromMonth = false) {
 export function tickSimulation(state, scope = "day") {
   for (const c of state.characters) c.currentActivity = decideAction(state, c);
   if (scope === "day") {
+    processPregnancies(state);
     generateEvent(state);
     updateRelationshipState(state);
     propagateGossip(state);

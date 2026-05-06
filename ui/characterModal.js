@@ -17,11 +17,15 @@ export function showCharacterModal(state, id, rerender) {
   <p>Gender: ${c.gender} | Age: ${c.age} | Family: ${family} | Origin Family: ${state.familiesById[c.originFamilyId]?.name || family} | Character Reputation: ${c.characterReputation ?? 0}</p>
   <h3>Stats</h3>
   <p>Beauty: ${c.beauty ?? 5} | Intelligence: ${c.intelligence ?? 5}</p>
+  <p>Looks: Hair ${c.looks?.hair || "unknown"} | Skin ${c.looks?.skin || "unknown"} | Eyes ${c.looks?.eyes || "unknown"} (${c.looks?.eyeColor || "unknown"})</p>
   <p>Traits: ${Object.entries(c.personality || {}).map(([k,v]) => `${k}:${v}`).join(", ")}</p>
+  <h3>Edit</h3>
+  <input id='renameCharacter' value='${c.firstName}' /> <button id='saveCharacterName'>Save Character Name</button>
+  <input id='renameFamily' value='${family}' /> <button id='saveFamilyName'>Save Family Name</button>
   <h3>Relationships</h3>
   <ul>${relRows || "<li>No emergent relationships yet.</li>"}</ul>
   <h3>Actions</h3>
-  <select id='actionType'><option value='marriage'>Propose Marriage</option><option value='divorce'>Initiate Divorce</option><option value='child'>Try for Child</option><option value='influence'>Influence Relationship</option></select>
+  <select id='actionType'><option value='marriage'>Propose Marriage</option><option value='divorce'>Initiate Divorce</option><option value='child'>Try for Child</option><option value='talk'>Talk</option><option value='gossip'>Gossip</option></select>
   <select id='actionTarget'></select>
   <button id='confirmAction'>Confirm</button>`;
 
@@ -39,6 +43,16 @@ export function showCharacterModal(state, id, rerender) {
   refill();
   typeEl.onchange = refill;
   document.getElementById("confirmAction").onclick = () => executeAction(state, c.id, typeEl.value, targetEl.value, rerender);
+  document.getElementById("saveCharacterName").onclick = () => {
+    c.firstName = document.getElementById("renameCharacter").value.trim() || c.firstName;
+    rerender();
+  };
+  document.getElementById("saveFamilyName").onclick = () => {
+    const fam = state.familiesById[c.familyId];
+    if (!fam) return;
+    fam.name = document.getElementById("renameFamily").value.trim() || fam.name;
+    rerender();
+  };
   modal.classList.remove("hidden");
 }
 
@@ -49,6 +63,8 @@ function executeAction(state, sourceId, action, targetId, rerender) {
   if (action === "marriage") {
     if (a.age < 16 || b.age < 16 || a.spouseId || b.spouseId) return;
     a.spouseId = b.id; b.spouseId = a.id; a.maritalStatus = "married"; b.maritalStatus = "married";
+    if (a.gender === "female" && b.gender === "male") a.familyId = b.familyId;
+    if (b.gender === "female" && a.gender === "male") b.familyId = a.familyId;
     addRel(a, b, "married", 30, "marriage event");
     state.familiesById[a.familyId].reputation += 1;
   }
@@ -59,11 +75,13 @@ function executeAction(state, sourceId, action, targetId, rerender) {
   if (action === "child") {
     const success = Math.random() < 0.5;
     if (success) {
-      const child = { id: `c${Date.now()}`, firstName: `Child${state.characters.length + 1}`, gender: Math.random() > 0.5 ? "male" : "female", age: 0, status: "alive", familyId: a.familyId, originFamilyId: a.familyId, maritalStatus: "not-married", beauty: 5, health: "Healthy", intelligence: Math.round((a.intelligence + b.intelligence) / 2), personality: { ambition: 5, jealousy: 5, charm: 5, morality: 5, intelligence: 5, socialHunger: 5, loyalty: 5, riskTolerance: 5 }, characterReputation: 0, relationships: [] };
-      state.characters.push(child); state.charactersById[child.id] = child;
+      const mother = a.gender === "female" ? a : b.gender === "female" ? b : null;
+      const father = mother?.id === a.id ? b : a;
+      if (mother) mother.pregnancy = { fatherId: father.id, daysLeft: 270 + Math.floor(Math.random() * 31) };
     }
   }
-  if (action === "influence") addRel(a, b, "friend", 8, "influence action");
+  if (action === "talk") addRel(a, b, "acquaintance", Math.random() > 0.5 ? 6 : -4, "talk");
+  if (action === "gossip") addRel(a, b, "rival", Math.random() > 0.6 ? 7 : -8, "gossip");
   state.feed.unshift({ text: `${a.firstName} executed ${action} with ${b.firstName}.`, type: "player", time: "now" });
   rerender();
 }

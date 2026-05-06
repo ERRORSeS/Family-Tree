@@ -1,3 +1,8 @@
+const HAIR_OPTIONS = ["ash","light blonde","yellow blonde","brown-gold","brown","dark brown","black","red"];
+const SKIN_OPTIONS = ["very pale","pale","medium","olive"];
+const EYE_TYPES = ["wide-doe","siren","doe","tired"];
+const EYE_COLORS = ["black","dark brown","light brown","greenish","green","emerald","light blue","blue","dark blue","deep blue"];
+
 export function renderFamilies(state, handlers) {
   const view = document.getElementById("mainView");
   view.innerHTML = "<h2>Families</h2>";
@@ -12,6 +17,7 @@ export function renderFamilies(state, handlers) {
     const selected = state.activeFamilyId === fam.id;
     card.innerHTML = `<button class='family-header'>${selected ? "✅" : "▸"} ${fam.name}</button><div>Wealth: ${fam.wealth} | Reputation: ${fam.reputation}</div>`;
     card.querySelector(".family-header").onclick = () => handlers.onSelectFamily(fam.id);
+    card.querySelector(".family-header").ondblclick = () => handlers.onDeleteFamily(fam.id);
 
     const chars = state.characters.filter((c) => c.familyId === fam.id && c.status !== "dead");
     const groups = {
@@ -39,6 +45,10 @@ export function renderFamilies(state, handlers) {
       editor.innerHTML = `<h4>Character Creation (all traits visible)</h4>
       <input id='name-${fam.id}' placeholder='Name'> <select id='gender-${fam.id}'><option>female</option><option>male</option></select>
       <input id='age-${fam.id}' type='number' value='18' min='0'>
+      <label>Hair <select id='hair-${fam.id}'>${HAIR_OPTIONS.map((o) => `<option>${o}</option>`).join("")}</select></label>
+      <label>Skin <select id='skin-${fam.id}'>${SKIN_OPTIONS.map((o) => `<option>${o}</option>`).join("")}</select></label>
+      <label>Eye Type <select id='eyes-${fam.id}'>${EYE_TYPES.map((o) => `<option>${o}</option>`).join("")}</select></label>
+      <label>Eye Color <select id='eyeColor-${fam.id}'>${EYE_COLORS.map((o) => `<option>${o}</option>`).join("")}</select></label>
       <label>Beauty <input id='beauty-${fam.id}' type='range' min='0' max='10' value='5'></label>
       <label>Ambition <input id='amb-${fam.id}' type='range' min='0' max='10' value='5'></label>
       <label>Jealousy <input id='jeal-${fam.id}' type='range' min='0' max='10' value='5'></label>
@@ -67,6 +77,12 @@ export function renderFamilies(state, handlers) {
             socialHunger: Number(document.getElementById(`social-${fam.id}`).value),
             loyalty: 5,
             riskTolerance: 5
+          },
+          looks: {
+            hair: document.getElementById(`hair-${fam.id}`).value,
+            skin: document.getElementById(`skin-${fam.id}`).value,
+            eyes: document.getElementById(`eyes-${fam.id}`).value,
+            eyeColor: document.getElementById(`eyeColor-${fam.id}`).value
           }
         });
       });
