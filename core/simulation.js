@@ -43,7 +43,7 @@ function runAutonomousActions(state) {
     const target = candidates[Math.floor(Math.random() * candidates.length)];
     const attraction = c.attractionScores?.[target.id] ?? Math.floor(Math.random() * 100);
     const loyalty = c.personality?.loyalty ?? 5;
-    if (!c.spouseId && !target.spouseId && attraction > 75 && Math.random() < 0.08) {
+    if (!c.spouseId && !target.spouseId && c.gender !== target.gender && attraction > 75 && Math.random() < 0.08) {
       c.spouseId = target.id; target.spouseId = c.id; c.maritalStatus = "married"; target.maritalStatus = "married";
       logEvent(state, { type: "marriage", participants: [c.id, target.id], priority: "medium", outcome: "Success", whatHappened: "Marriage formed.", resultLines: ["New status: married"] });
       continue;
@@ -57,7 +57,7 @@ function runAutonomousActions(state) {
     const spouse = c.spouseId ? state.charactersById[c.spouseId] : null;
     const spouseRel = spouse ? (c.relationships || []).find((r) => r.targetId === spouse.id)?.strength ?? 0 : -100;
     const eligibleAge = c.age >= 18 && c.age <= 45 && spouse && spouse.age >= 18 && spouse.age <= 55;
-    if (eligibleAge && spouseRel > 20 && Math.random() < 0.1) attemptChild(state, c, spouse, "ai");
+    if (eligibleAge && spouseRel > 20 && c.gender !== spouse.gender && Math.random() < 0.1) attemptChild(state, c, spouse, "ai");
   }
 }
 

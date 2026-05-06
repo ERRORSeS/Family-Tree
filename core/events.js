@@ -140,6 +140,7 @@ export function startPregnancy(state, parentA, parentB, via = "ai") {
 
 export function attemptChild(state, parentA, parentB, via = "ai") {
   if (!parentA || !parentB || parentA.status === "dead" || parentB.status === "dead") return false;
+  if (parentA.gender === parentB.gender) return false;
   const mother = parentA.gender === "female" ? parentA : parentB.gender === "female" ? parentB : null;
   const father = mother?.id === parentA.id ? parentB : parentA;
   if (!mother || !father || mother.pregnancy) return false;
@@ -234,8 +235,10 @@ export function generateEvent(state) {
   const weighted = pool.sort((a, b) => (((p1.relationships || []).find((r) => r.targetId === b.id)?.strength || 0) - (((p1.relationships || []).find((r) => r.targetId === a.id)?.strength || 0))));
   const p2 = Math.random() < 0.6 ? weighted[0] : randomFrom(pool);
   if (!p2) return;
+  const sameGenderPair = p1.gender === p2.gender;
 
   let outcome = randomFrom(EVENT_POOL[category]);
+  if (sameGenderPair && category === "romantic") outcome = "awkward interaction";
   const key = `${p1.id}:${p2.id}:${category}`;
   const last = state.lastEventByPair?.[key];
   if (last === outcome) {
@@ -250,7 +253,7 @@ export function generateEvent(state) {
   const repDelta = category === "scandal" || category === "conflict" ? -3 : 2;
   const relationshipShift = category === "romantic" ? 12 : category === "conflict" ? -12 : 6;
   const visibility = category === "romantic" && outcome.includes("secret") ? "secret" : "public";
-  const relationType = randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
+  const relationType = sameGenderPair && category === "romantic" ? "Friendly" : randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
   createRelationship(state, p1.id, p2.id, relationType, `${category}:${outcome}`, relationshipShift, visibility);
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += repDelta;
   if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += repDelta;
