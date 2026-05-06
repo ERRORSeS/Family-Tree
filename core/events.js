@@ -1,6 +1,14 @@
 import { computeBeauty, inheritFeature, inheritScalar } from "./genetics.js";
 
-const EVENT_TYPES = ["death", "scandal", "marriage", "affair", "visit"];
+const EVENT_TYPES = ["social", "romantic", "conflict", "family", "scandal", "rare"];
+const EVENT_POOL = {
+  social: ["successful interaction", "awkward interaction", "ignored attempt", "unexpected connection"],
+  romantic: ["attraction increase", "rejection", "secret interest", "jealousy triggered"],
+  conflict: ["argument", "rivalry escalation", "public embarrassment"],
+  family: ["inheritance tension", "parental pressure", "sibling rivalry"],
+  scandal: ["affair discovered", "rumor spread", "reputation collapse"],
+  rare: ["sudden death", "unexpected pregnancy", "dramatic breakup", "inheritance shock"]
+};
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const randomFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -40,6 +48,13 @@ export function logEvent(state, { type = "event", participants = [], outcome = "
   state.feed.unshift(entry);
   state.events = state.events.slice(0, 300);
   state.feed = state.feed.slice(0, 120);
+}
+
+
+function addMemory(character, memory) {
+  character.memoryLog = character.memoryLog || [];
+  character.memoryLog.unshift(memory);
+  character.memoryLog = character.memoryLog.slice(0, 30);
 }
 
 function createRelationship(state, aId, bId, type, reason, strengthDelta = 5) {
@@ -120,7 +135,7 @@ export function executeBirth(state, mother, father) {
   state.characters.push(child); state.charactersById[child.id] = child;
   const fam = state.familiesById[mother.familyId];
   let repDelta = child.gender === "male" ? 2 : 1;
-  if (fam) fam.reputation += repDelta;
+  if (fam) { fam.reputation += repDelta; fam.children = fam.children || []; fam.children.push(child.id); }
   createRelationship(state, mother.id, father.id, "bonded", "childbirth", 15);
   logEvent(state, { type: "Childbirth", participants: [mother.id, father.id, child.id], outcome: "Success", severity: calcSeverityLevel({ participants: 3, repImpact: repDelta, relationshipShift: 15, riskLevel: risk }), effects: `Child created (${child.firstName}, ${child.gender}); family reputation +${repDelta}.` });
 }
@@ -128,21 +143,48 @@ export function executeBirth(state, mother, father) {
 export function updateRelationshipState(state) { state.characters.forEach((c) => { c.relationships = (c.relationships || []).map((r) => ({ ...r, strength: clamp((r.strength ?? 0) + (Math.random() > 0.5 ? 1 : -1), -100, 100) })); }); }
 
 function executeDeath(state, character) {
-  character.status = "dead"; character.maritalStatus = "widowed";
-  logEvent(state, { type: "Death", participants: [character.id], outcome: "Success", severity: "high", effects: "Character deceased; household relationships altered." });
+  character.status = "dead";
+  for (const c of state.characters) {
+    if (c.spouseId === character.id) {
+      c.spouseId = null;
+      c.maritalStatus = "widowed";
+      c.relationships = (c.relationships || []).map((r) => r.targetId === character.id ? { ...r, type: "deceased spouse", originReason: "death" } : r);
+      c.characterReputation = (c.characterReputation || 0) - 1;
+      addMemory(c, `Lost spouse ${character.firstName}`);
+    }
+  }
+  character.spouseId = null;
+  character.maritalStatus = "deceased";
+  addMemory(character, "Died suddenly");
+  logEvent(state, { type: "Death", participants: [character.id], outcome: "Success", severity: "high", effects: "Spouse statuses updated to widowed; marriage links removed." });
 }
 
 export function generateEvent(state) {
   const living = state.characters.filter((c) => c.status !== "dead" && c.age >= 10);
   if (living.length < 2) return;
-  const type = randomFrom(EVENT_TYPES);
+  const category = randomFrom(EVENT_TYPES);
   const p1 = randomFrom(living);
   const p2 = living.find((c) => c.id !== p1.id && c.age >= 10);
   if (!p2) return;
-  if (type === "death") return executeDeath(state, p1);
-  const repDelta = type === "scandal" ? -4 : 2;
-  createRelationship(state, p1.id, p2.id, type === "marriage" ? "married" : type === "affair" ? "lover" : type === "scandal" ? "rival" : "friend", type, repDelta * 2);
+
+  let outcome = randomFrom(EVENT_POOL[category]);
+  const last = state.lastEventByPair?.[`${p1.id}:${p2.id}`];
+  if (last === outcome) {
+    const options = EVENT_POOL[category].filter((x) => x !== last);
+    outcome = randomFrom(options.length ? options : EVENT_POOL[category]);
+  }
+  state.lastEventByPair = state.lastEventByPair || {};
+  state.lastEventByPair[`${p1.id}:${p2.id}`] = outcome;
+
+  if (category === "rare" && outcome === "sudden death") return executeDeath(state, p1);
+  if (category === "rare" && outcome === "unexpected pregnancy") startPregnancy(state, p1, p2, "rare");
+
+  const repDelta = category === "scandal" || category === "conflict" ? -3 : 2;
+  const relationshipShift = category === "romantic" ? 12 : category === "conflict" ? -12 : 6;
+  createRelationship(state, p1.id, p2.id, category === "romantic" ? "lover" : category === "conflict" ? "rival" : "friend", category, relationshipShift);
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += repDelta;
   if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += repDelta;
-  logEvent(state, { type: type[0].toUpperCase() + type.slice(1), participants: [p1.id, p2.id], outcome: "Success", severity: calcSeverityLevel({ participants: 2, repImpact: repDelta, relationshipShift: repDelta * 2, riskLevel: type === "scandal" ? "medium" : "low" }), effects: `${type} altered relationship and reputation.` });
+  addMemory(p1, `${category}: ${outcome} with ${p2.firstName}`);
+  addMemory(p2, `${category}: ${outcome} with ${p1.firstName}`);
+  logEvent(state, { type: category[0].toUpperCase() + category.slice(1), participants: [p1.id, p2.id], outcome: "Success", severity: calcSeverityLevel({ participants: 2, repImpact: repDelta, relationshipShift, riskLevel: category === "rare" ? "high" : category === "scandal" ? "medium" : "low" }), effects: `${outcome}; relationship and reputation updated.` });
 }
