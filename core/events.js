@@ -194,7 +194,13 @@ export function executeBirth(state, mother, father) {
 }
 
 export function completePregnancy(state, pregnancy, mother, father) {
-  if (!mother?.pregnancy || !father || mother.status === "dead" || father.status === "dead") return;
+  if (!mother?.pregnancy || mother.status === "dead") return;
+  if (!father || father.status === "dead") {
+    mother.pregnancy = null;
+    if (state.pregnancies) state.pregnancies = state.pregnancies.filter((p) => p !== pregnancy);
+    logEvent(state, { type: "birth", participants: [mother.id], priority: "high", whatHappened: "Pregnancy ended without a surviving co-parent.", resultLines: ["No child was born", "Pregnancy status cleared"], outcome: "Failure" });
+    return;
+  }
   const risk = pregnancy?.riskLevel || "low";
   const failThreshold = risk === "high" ? 0.1 : risk === "medium" ? 0.05 : 0.02;
   if (Math.random() < failThreshold) {
@@ -294,9 +300,9 @@ export function generateEvent(state) {
   if (category === "rare" && outcome === "unexpected pregnancy" && p1.gender !== p2.gender && !isCloseRelative(p1, p2)) startPregnancy(state, p1, p2, "rare");
 
   const repDelta = category === "scandal" || category === "conflict" ? -3 : 2;
-  const relationshipShift = category === "romantic" ? 12 : category === "conflict" ? -12 : 6;
-  const visibility = category === "romantic" && outcome.includes("secret") ? "secret" : "public";
   const blockedRomance = category === "romantic" && (sameGenderPair || isCloseRelative(p1, p2));
+  const relationshipShift = blockedRomance ? -2 : (category === "romantic" ? 12 : category === "conflict" ? -12 : 6);
+  const visibility = category === "romantic" && outcome.includes("secret") ? "secret" : "public";
   const relationType = blockedRomance ? "Friendly" : randomFrom(RELATIONSHIP_MAP[category] || ["Friendly"]);
   if (blockedRomance) {
     outcome = "awkward interaction";
