@@ -10,8 +10,10 @@ export function showCharacterModal(state, id, rerender) {
   const relRows = (c.relationships || []).map((r) => {
     const t = state.charactersById[r.targetId];
     if (!t) return "";
-    return `<li>${t.firstName} — ${r.type} (${r.originReason || "interaction"})</li>`;
+    return `<li>${t.firstName} — ${r.type} | Strength: ${r.strength ?? 0} | Attraction: ${r.attraction ?? 0} | Trust: ${r.trust ?? 50} | Familiarity: ${r.familiarity ?? 10} | ${r.visibility || "public"} (${r.originReason || "interaction"})</li>`;
   }).join("");
+  const pregnancy = c.pregnancy ? `<h3>Pregnancy</h3>
+  <p>Status: Pregnant | Months Remaining: ${c.pregnancy.monthsRemaining} | Father: ${state.charactersById[c.pregnancy.parentB]?.firstName || "Unknown"} | Risk Level: ${c.pregnancy.riskLevel?.[0]?.toUpperCase()}${c.pregnancy.riskLevel?.slice(1)}</p>` : "";
 
   el.innerHTML = `<h2>${titleFor(c)} ${c.firstName}</h2>
   <h3>Identity</h3>
@@ -20,6 +22,7 @@ export function showCharacterModal(state, id, rerender) {
   <p>Beauty: ${c.beauty ?? 5} | Intelligence: ${c.intelligence ?? 5}</p>
   <p>Looks: Hair ${c.looks?.hair || "unknown"} | Skin ${c.looks?.skin || "unknown"} | Eyes ${c.looks?.eyes || "unknown"} (${c.looks?.eyeColor || "unknown"})</p>
   <p>Traits: ${Object.entries(c.personality || {}).map(([k,v]) => `${k}:${v}`).join(", ")}</p>
+  ${pregnancy}
   <h3>Edit</h3>
   <input id='renameCharacter' value='${c.firstName}' /> <button id='saveCharacterName'>Save Character Name</button>
   <input id='renameFamily' value='${family}' /> <button id='saveFamilyName'>Save Family Name</button>
