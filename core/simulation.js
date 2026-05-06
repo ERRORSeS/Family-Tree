@@ -17,6 +17,10 @@ function processPregnancies(state) {
   for (const c of state.characters) {
     if (c.status === "dead" || !c.pregnancy) continue;
     if (c.pregnancy.monthsRemaining > 0) c.pregnancy.monthsRemaining -= 1;
+    if (c.pregnancy.monthsRemaining <= 0) {
+      c.pregnancy.monthsRemaining = 0;
+      c.pregnancy.daysRemaining = Math.max(0, (c.pregnancy.daysRemaining ?? 0) - 30);
+    }
     if (Math.random() < 0.06 && c.pregnancy.riskLevel !== "low") c.pregnancy.complications.push("complication");
     if (Math.random() < 0.2) {
       logEvent(state, { type: "pregnancy update", participants: [c.pregnancy.parentA, c.pregnancy.parentB], priority: "low", whatHappened: "Pregnancy is progressing.", resultLines: [`Months remaining: ${Math.max(0, c.pregnancy.monthsRemaining)}`], outcome: "Success", visibility: "private" });
@@ -34,6 +38,7 @@ function processPregnancyDays(state) {
   for (const c of state.characters) {
     if (c.status === "dead" || !c.pregnancy) continue;
     if (c.pregnancy.monthsRemaining > 0) continue;
+    c.pregnancy.monthsRemaining = 0;
     c.pregnancy.daysRemaining = Math.max(0, (c.pregnancy.daysRemaining ?? 0) - 1);
     if (c.pregnancy.daysRemaining <= 0) due.push(c);
   }

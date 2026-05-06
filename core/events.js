@@ -223,7 +223,7 @@ export function completePregnancy(state, pregnancy, mother, father) {
   createRelationship(state, mother.id, father.id, "Protective", "childbirth", 15);
   createRelationship(state, mother.id, child.id, "Protective", "parent-child", 35);
   createRelationship(state, father.id, child.id, "Protective", "parent-child", 35);
-  logEvent(state, { type: "birth", participants: [mother.id, father.id, child.id], priority: "high", whatHappened: "A child was born.", resultLines: ["Outcome: Successful birth", "New child added to family"], outcome: "Success" });
+  logEvent(state, { type: "birth", participants: [mother.id, father.id, child.id], priority: "high", whatHappened: `${mother.firstName} gave birth to ${child.firstName}.`, resultLines: [`Child: ${child.gender}, age 0`, "Pregnancy completed and child added to family"], outcome: "Success" });
   mother.pregnancy = null;
   if (state.pregnancies) state.pregnancies = state.pregnancies.filter((p) => p !== pregnancy);
 }
