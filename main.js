@@ -71,12 +71,22 @@ function renderActions() {
 }
 
 function renderFamiliesTab() {
-  renderFamilies(state, { onCharacterClick: (id) => { state.selectedCharacterId = id; showCharacterModal(state, id, rerender); }, onSelectFamily: (id) => { state.activeFamilyId = id; renderFamiliesTab(); } , onCreateCharacter: createCharacter, onModifyFamily: modifyFamily, onRenameFamily: renameFamily });
+  renderFamilies(state, { onCharacterClick: (id) => { state.selectedCharacterId = id; showCharacterModal(state, id, rerender); }, onSelectFamily: (id) => { state.activeFamilyId = id; renderFamiliesTab(); } , onCreateCharacter: createCharacter, onModifyFamily: modifyFamily, onRenameFamily: renameFamily, onDeleteFamily: deleteFamily });
 }
 
 function createCharacter(data) { if (!state.activeFamilyId) return; const id = `c${Date.now()}`; const c = { id, ...data, familyId: state.activeFamilyId, originFamilyId: state.activeFamilyId, maritalStatus: "not-married", health: "Healthy", status: "alive", characterReputation: 0, relationships: [] }; state.characters.push(c); state.charactersById[id] = c; state.feed.unshift({ text: `${c.firstName} joined ${state.familiesById[state.activeFamilyId].name}.`, type: "player", time: "now" }); render(); saveGame(); }
 function modifyFamily(field, amount) { const f = state.familiesById[state.activeFamilyId]; if (!f) return; f[field] += amount; state.feed.unshift({ text: `${f.name} ${field} changed by ${amount}.`, type: "player", time: "now" }); render(); saveGame(); }
 function renameFamily(name) { const f = state.familiesById[state.activeFamilyId]; if (!f) return; f.name = name; render(); saveGame(); }
+function deleteFamily(familyId) {
+  state.families = state.families.filter((f) => f.id !== familyId);
+  state.characters = state.characters.filter((c) => c.familyId !== familyId);
+  state.familiesById = Object.fromEntries(state.families.map((f) => [f.id, f]));
+  state.charactersById = Object.fromEntries(state.characters.map((c) => [c.id, c]));
+  if (state.activeFamilyId === familyId) state.activeFamilyId = state.families[0]?.id || null;
+  state.feed.unshift({ text: "A family was removed from society.", type: "player", time: "now" });
+  render();
+  saveGame();
+}
 function rerender() { render(); saveGame(); }
 
 function render() {

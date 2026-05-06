@@ -1,4 +1,15 @@
 const EVENT_TYPES = ["birth", "death", "scandal", "marriage", "affair", "visit"];
+const NEGATIVE_SEVERITY = [
+  { label: "light", delta: -1 },
+  { label: "medium", delta: -4 },
+  { label: "severe", delta: -7 },
+  { label: "very severe", delta: -10 }
+];
+const POSITIVE_SEVERITY = [
+  { label: "small", delta: 2 },
+  { label: "medium", delta: 5 },
+  { label: "large", delta: 7 }
+];
 
 export function logEvent(state, text, type = "event", participants = []) {
   const entry = { text, type, participants, time: `Y${state.year} M${state.month} D${state.monthDay}` };
@@ -37,7 +48,7 @@ function executeDeath(state, character) {
   logEvent(state, `Death: ${character.firstName} died. ${family?.name || "Family"} enters mourning.`, "death", [character.id]);
 }
 
-function executeBirth(state, parentA, parentB) {
+export function executeBirth(state, parentA, parentB) {
   const child = {
     id: `c${Date.now()}${Math.floor(Math.random() * 1000)}`,
     firstName: `Child${state.characters.length + 1}`,
@@ -58,7 +69,13 @@ function executeBirth(state, parentA, parentB) {
     }, {}),
     characterReputation: 0,
     relationships: [],
-    parents: [parentA.id, parentB?.id].filter(Boolean)
+    parents: [parentA.id, parentB?.id].filter(Boolean),
+    looks: {
+      hair: randomFrom([parentA.looks?.hair, parentB?.looks?.hair].filter(Boolean)),
+      skin: randomFrom([parentA.looks?.skin, parentB?.looks?.skin].filter(Boolean)),
+      eyes: randomFrom([parentA.looks?.eyes, parentB?.looks?.eyes].filter(Boolean)),
+      eyeColor: randomFrom([parentA.looks?.eyeColor, parentB?.looks?.eyeColor].filter(Boolean))
+    }
   };
   state.characters.push(child);
   state.charactersById[child.id] = child;
@@ -100,11 +117,12 @@ export function generateEvent(state) {
   const participants = [p1, p2].filter(Boolean);
   const valid = participants.length >= 2;
   if (!valid) return;
-  p1.characterReputation += type === "scandal" ? -2 : 1;
-  p2.characterReputation += type === "scandal" ? -2 : 1;
+  const severity = type === "scandal" ? randomFrom(NEGATIVE_SEVERITY) : randomFrom(POSITIVE_SEVERITY);
+  p1.characterReputation += severity.delta;
+  p2.characterReputation += severity.delta;
   updateRelationsFromEvent(state, p1, p2, type);
-  if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += type === "scandal" ? -1 : 1;
-  if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += type === "scandal" ? -1 : 1;
+  if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].reputation += severity.delta;
+  if (state.familiesById[p2.familyId]) state.familiesById[p2.familyId].reputation += severity.delta;
   if (state.familiesById[p1.familyId]) state.familiesById[p1.familyId].gossipLevel = (state.familiesById[p1.familyId].gossipLevel || 0) + 1;
-  logEvent(state, `${type[0].toUpperCase() + type.slice(1)}: ${p1.firstName} and ${p2.firstName} reshaped court dynamics.`, type, participants.map((p) => p.id));
+  logEvent(state, `${type[0].toUpperCase() + type.slice(1)} (${severity.label}): ${p1.firstName} and ${p2.firstName} reshaped court dynamics.`, type, participants.map((p) => p.id));
 }
