@@ -116,7 +116,14 @@ function conceptionChance(parentA, parentB, family) {
   const relationship = clamp((relStrength + 100) / 200, 0, 1);
   const health = ((parentA.health === "Healthy" ? 1 : 0.65) + (parentB.health === "Healthy" ? 1 : 0.65)) / 2;
   const scandalPenalty = clamp(((family?.scandal || 0) / 100) + ((family?.gossipLevel || 0) / 200), 0, 0.35);
-  return clamp((fertilityOf(parentA) + fertilityOf(parentB)) / 2 + relationship * 0.35 + health * 0.15 - scandalPenalty, 0.02, 0.95);
+  const ageFactor = (person) => {
+    const age = person.age || 18;
+    if (age < 18 || age > 50) return 0.35;
+    if (age <= 35) return 1;
+    return clamp(1 - ((age - 35) * 0.045), 0.45, 1);
+  };
+  const ageChance = (ageFactor(parentA) + ageFactor(parentB)) / 2;
+  return clamp(((fertilityOf(parentA) + fertilityOf(parentB)) / 2 + relationship * 0.35 + health * 0.15 - scandalPenalty) * ageChance, 0.02, 0.95);
 }
 
 function pregnancyRisk(parentA, parentB) {
@@ -145,24 +152,25 @@ export function attemptChild(state, parentA, parentB, via = "ai") {
       type: "child attempt",
       participants: [mother.id, father.id],
       priority: "medium",
-      whatHappened: "They attempted to have a child.",
+      whatHappened: `${mother.firstName} tried for a child with ${father.firstName}`,
       resultLines: ["Outcome: Failure (no pregnancy)", `Relationship ${relationshipShift >= 0 ? "improved" : "worsened"} (${relationshipShift >= 0 ? "+" : ""}${relationshipShift})`],
       outcome: "Failure",
       visibility: via === "ai" ? "private" : "public"
     });
     return false;
   }
-  const monthsRemaining = 9 + Math.floor((Math.random() * 3) - 1);
+  const monthsRemaining = 9 + Math.floor(Math.random() * 2);
+  const daysRemaining = Math.floor(Math.random() * 31);
   const riskLevel = pregnancyRisk(mother, father);
-  mother.pregnancy = { parentA: mother.id, parentB: father.id, startDate: `${state.year}-${state.month}-${state.monthDay}`, monthsRemaining, riskLevel, status: "active", outcome: "pending", complications: [] };
+  mother.pregnancy = { parentA: mother.id, parentB: father.id, startDate: `${state.year}-${state.month}-${state.monthDay}`, monthsRemaining, daysRemaining, riskLevel, status: "active", outcome: "pending", complications: [] };
   state.pregnancies = state.pregnancies || [];
   state.pregnancies.push(mother.pregnancy);
   logEvent(state, {
     type: "child attempt",
     participants: [mother.id, father.id],
     priority: "medium",
-    whatHappened: "They attempted to have a child.",
-    resultLines: ["Outcome: Success (pregnancy started)", `Relationship ${relationshipShift >= 0 ? "improved" : "worsened"} (${relationshipShift >= 0 ? "+" : ""}${relationshipShift})`],
+    whatHappened: `${mother.firstName} tried for a child with ${father.firstName}`,
+    resultLines: [`Outcome: Success (pregnancy started, ${riskLevel} risk)`, `Relationship ${relationshipShift >= 0 ? "improved" : "worsened"} (${relationshipShift >= 0 ? "+" : ""}${relationshipShift})`],
     outcome: "Success",
     visibility: via === "ai" ? "private" : "public"
   });
