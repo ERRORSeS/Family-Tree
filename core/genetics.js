@@ -1,8 +1,8 @@
 const hair = ["ash","light blonde","yellow blonde","brown-gold","brown","dark brown","black","red"];
 const skin = ["very pale","pale","medium","olive"];
-const eyeType = ["wide-doe","siren","doe","tired"];
+const eyeType = ["wide-doe","siren","doe-doe","tired"];
 const eyeColor = ["black","dark brown","light brown","greenish","green","emerald","light blue","blue","dark blue","deep blue"];
-const nose = ["straight","aquiline","soft","narrow"];
+const nose = ["slightly bend","bend","slight bump","bump","masculine"];
 const faceType = ["oval", "round", "square", "heart", "long"];
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -61,7 +61,10 @@ export function inheritFeature(state, parentA, parentB, featureKey) {
     return dominant?.looks?.[featureKey] ?? parentA?.looks?.[featureKey] ?? parentB?.looks?.[featureKey];
   }
   if (roll < 0.8) {
-    return pick([parentA?.looks?.[featureKey], parentB?.looks?.[featureKey]].filter(Boolean));
+    const a = parentA?.looks?.[featureKey];
+    const b = parentB?.looks?.[featureKey];
+    if (a && b && a !== b && Math.random() < 0.35) return `${a}/${b}`;
+    return pick([a, b].filter(Boolean));
   }
   const ancestral = getAncestralPool(state, parentA, parentB, featureKey).filter(Boolean);
   return ancestral.length ? pick(ancestral) : pick([parentA?.looks?.[featureKey], parentB?.looks?.[featureKey]].filter(Boolean));

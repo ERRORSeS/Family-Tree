@@ -2,6 +2,14 @@ import { decideAction } from "./ai.js";
 import { propagateGossip } from "./gossip.js";
 import { recalculateReputation } from "./reputation.js";
 import { completePregnancy, logEvent, generateEvent, updateRelationshipState, attemptChild, flushVisibleEvents } from "./events.js";
+const isCloseRelative = (a, b) => {
+  if (!a || !b) return false;
+  const aParents = new Set(a.parents || []);
+  const bParents = new Set(b.parents || []);
+  if ([...aParents].some((p) => bParents.has(p))) return true;
+  if (aParents.has(b.id) || bParents.has(a.id)) return true;
+  return false;
+};
 
 function processPregnancies(state) {
   const due = [];
@@ -9,6 +17,10 @@ function processPregnancies(state) {
   for (const c of state.characters) {
     if (c.status === "dead" || !c.pregnancy) continue;
     if (c.pregnancy.monthsRemaining > 0) c.pregnancy.monthsRemaining -= 1;
+    if (c.pregnancy.monthsRemaining <= 0) {
+      c.pregnancy.monthsRemaining = 0;
+      c.pregnancy.daysRemaining = Math.max(0, (c.pregnancy.daysRemaining ?? 0) - 30);
+    }
     if (Math.random() < 0.06 && c.pregnancy.riskLevel !== "low") c.pregnancy.complications.push("complication");
     if (Math.random() < 0.2) {
       logEvent(state, { type: "pregnancy update", participants: [c.pregnancy.parentA, c.pregnancy.parentB], priority: "low", whatHappened: "Pregnancy is progressing.", resultLines: [`Months remaining: ${Math.max(0, c.pregnancy.monthsRemaining)}`], outcome: "Success", visibility: "private" });
@@ -26,6 +38,7 @@ function processPregnancyDays(state) {
   for (const c of state.characters) {
     if (c.status === "dead" || !c.pregnancy) continue;
     if (c.pregnancy.monthsRemaining > 0) continue;
+    c.pregnancy.monthsRemaining = 0;
     c.pregnancy.daysRemaining = Math.max(0, (c.pregnancy.daysRemaining ?? 0) - 1);
     if (c.pregnancy.daysRemaining <= 0) due.push(c);
   }
@@ -43,8 +56,10 @@ function runAutonomousActions(state) {
     const target = candidates[Math.floor(Math.random() * candidates.length)];
     const attraction = c.attractionScores?.[target.id] ?? Math.floor(Math.random() * 100);
     const loyalty = c.personality?.loyalty ?? 5;
-    if (!c.spouseId && !target.spouseId && c.gender !== target.gender && attraction > 75 && Math.random() < 0.08) {
+    if (!c.spouseId && !target.spouseId && c.gender !== target.gender && !isCloseRelative(c, target) && attraction > 75 && Math.random() < 0.08) {
       c.spouseId = target.id; target.spouseId = c.id; c.maritalStatus = "married"; target.maritalStatus = "married";
+      if (c.gender === "female" && target.gender === "male") c.familyId = target.familyId;
+      if (target.gender === "female" && c.gender === "male") target.familyId = c.familyId;
       logEvent(state, { type: "marriage", participants: [c.id, target.id], priority: "medium", outcome: "Success", whatHappened: "Marriage formed.", resultLines: ["New status: married"] });
       continue;
     }
@@ -55,9 +70,12 @@ function runAutonomousActions(state) {
       continue;
     }
     const spouse = c.spouseId ? state.charactersById[c.spouseId] : null;
-    const spouseRel = spouse ? (c.relationships || []).find((r) => r.targetId === spouse.id)?.strength ?? 0 : -100;
+    const spouseRelObj = spouse ? (c.relationships || []).find((r) => r.targetId === spouse.id) : null;
+    const spouseRel = spouseRelObj?.strength ?? -100;
+    const spouseTrust = spouseRelObj?.trust ?? 50;
     const eligibleAge = c.age >= 18 && c.age <= 45 && spouse && spouse.age >= 18 && spouse.age <= 55;
-    if (eligibleAge && spouseRel > 20 && c.gender !== spouse.gender && Math.random() < 0.1) attemptChild(state, c, spouse, "ai");
+    const loyal = (c.personality?.loyalty ?? 5) >= 4;
+    if (eligibleAge && spouseRel > 30 && spouseTrust > 45 && loyal && c.gender !== spouse.gender && !isCloseRelative(c, spouse) && Math.random() < 0.07) attemptChild(state, c, spouse, "ai");
   }
 }
 
